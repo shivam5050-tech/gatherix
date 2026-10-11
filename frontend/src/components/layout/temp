@@ -1,0 +1,132 @@
+import { Search, Menu, X } from "lucide-react";
+import { useState } from "react";
+
+function Navbar() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  return (
+    <nav className="border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+
+        {/* Logo */}
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white">
+            G
+          </div>
+
+          <span className="text-xl font-bold text-slate-900">
+            Gatherix
+          </span>
+        </div>
+
+        {/* Desktop Navigation */}
+        <div className="hidden items-center gap-8 md:flex">
+          <a
+            href="#"
+            className="text-sm font-medium text-slate-700 transition hover:text-indigo-600"
+          >
+            Home
+          </a>
+
+          <a
+            href="#"
+            className="text-sm font-medium text-slate-700 transition hover:text-indigo-600"
+          >
+            Explore Events
+          </a>
+
+          <a
+            href="#"
+            className="text-sm font-medium text-slate-700 transition hover:text-indigo-600"
+          >
+            About
+          </a>
+
+          <a
+            href="#"
+            className="text-sm font-medium text-slate-700 transition hover:text-indigo-600"
+          >
+            Contact
+          </a>
+        </div>
+
+        {/* Right Side */}
+        <div className="hidden items-center gap-3 md:flex">
+
+          <button className="rounded-full p-2 text-slate-600 transition hover:bg-slate-100 hover:text-indigo-600">
+            <Search size={19} />
+          </button>
+
+          <button className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
+            Login
+          </button>
+
+          <button className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">
+            Sign Up
+          </button>
+
+        </div>
+
+        {/* Mobile Menu Button */}
+        <button
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          className="rounded-lg p-2 text-slate-700 md:hidden"
+        >
+          {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+
+      </div>
+
+      {/* Mobile Menu */}
+      {isMenuOpen && (
+        <div className="border-t border-slate-200 px-6 py-5 md:hidden">
+
+          <div className="flex flex-col gap-4">
+
+            <a
+              href="#"
+              className="font-medium text-slate-700"
+            >
+              Home
+            </a>
+
+            <a
+              href="#"
+              className="font-medium text-slate-700"
+            >
+              Explore Events
+            </a>
+
+            <a
+              href="#"
+              className="font-medium text-slate-700"
+            >
+              About
+            </a>
+
+            <a
+              href="#"
+              className="font-medium text-slate-700"
+            >
+              Contact
+            </a>
+
+            <div className="flex gap-3 pt-2">
+              <button className="flex-1 rounded-lg border border-slate-300 py-2.5 font-medium">
+                Login
+              </button>
+
+              <button className="flex-1 rounded-lg bg-indigo-600 py-2.5 font-medium text-white">
+                Sign Up
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+    </nav>
+  );
+}
+
+export default Navbar;

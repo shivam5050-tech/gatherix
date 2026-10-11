@@ -1,0 +1,27 @@
+App
+│
+├── Navbar                    ← Global
+│
+├── Routes
+│   │
+│   ├── /                     → Home
+│   │
+│   ├── /events               → Explore Events
+│   │
+│   ├── /events/:id           → Event Details
+│   │
+│   ├── /categories/:slug    → Category Events
+│   │
+│   ├── /login                → Login
+│   │
+│   ├── /register             → Register
+│   │
+│   ├── /bookings             → My Bookings
+│   │
+│   ├── /profile              → Profile
+│   │
+│   ├── /organizer            → Organizer Dashboard
+│   │
+│   └── /admin                → Admin Dashboard
+│
+└── Footer                    ← Global

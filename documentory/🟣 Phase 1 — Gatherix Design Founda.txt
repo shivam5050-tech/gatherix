@@ -1,0 +1,15 @@
+🟣 Phase 1 — Gatherix Design Foundation
+
+Before making the Navbar or Home page, we need to establish the visual language of the website.
+
+Our initial design direction:
+
+Primary: Indigo / Purple
+Background: White + very light gray
+Text: Dark navy
+Accent: Violet/Pink
+Cards: White with subtle borders/shadows
+Corners: Rounded, but not excessive
+Typography: Clean modern sans-serif
+Style: Professional + energetic + minimal
+

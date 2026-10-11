@@ -1,0 +1,24 @@
+src/
+│
+├── components/
+│   │
+│   ├── home/
+│   │   ├── Hero.jsx
+│   │   ├── Stats.jsx
+│   │   ├── CategorySection.jsx
+│   │   ├── TrendingEvents.jsx
+│   │   ├── PopularEvents.jsx
+│   │   ├── Features.jsx
+│   │   ├── OrganizerCTA.jsx
+│   │   ├── Testimonials.jsx
+│   │   └── Newsletter.jsx
+│   │
+│   ├── Navbar.jsx
+│   └── Footer.jsx
+│
+└── pages/
+    ├── Home.jsx
+    ├── Events.jsx
+    ├── EventDetails.jsx
+    ├── Login.jsx
+    └── Register.jsx
