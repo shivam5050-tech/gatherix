@@ -1,199 +1,54 @@
+import { Link } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
+
+const footerGroups = [
+  {
+    title: "Explore",
+    links: [
+      { label: "Find events", href: "/#events" },
+      { label: "Categories", href: "/#categories" },
+      { label: "What Gatherix offers", href: "/#features" },
+    ],
+  },
+  {
+    title: "Your account",
+    links: [
+      { label: "Log in", href: "/login" },
+      { label: "Create an account", href: "/signup" },
+    ],
+  },
+];
+
 export function Footer() {
-    return (
-        <footer className="bg-blue-50 ">
+  return (
+    <footer className="border-t border-indigo-100 bg-[#f3f2ff]">
+      <div className="page-container grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr] lg:py-14">
+        <div>
+          <Link aria-label="Gatherix home" className="inline-flex items-center gap-2.5" to="/">
+            <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-brand-primary to-brand-violet text-base font-extrabold text-white">G</span>
+            <span className="text-xl font-extrabold tracking-tight text-ink">Gatherix</span>
+          </Link>
+          <p className="mt-4 max-w-sm text-sm leading-6 text-slate-600">Discover events and find experiences that make getting together special.</p>
+          <Link className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-brand-primary hover:text-brand-primary-dark" to="/#events">Explore events <ArrowUpRight aria-hidden="true" size={15} /></Link>
+        </div>
 
-            <div className="mx-auto max-w-7xl px-6 py-14">
-
-                <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-5">
-
-                    <div className="lg:col-span-2">
-
-                        <div className="flex items-center gap-2 text-indigo-600">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#3727CF] to-[#A31C82] text-xl font-bold">
-                                G
-                            </div>
-
-                            <span className="text-2xl font-bold">
-                                Gatherix
-                            </span>
-                            
-                        </div>
-
-                        <p className="mt-4 max-w-sm text-sm leading-6 text-slate-400">
-                            Discover amazing events, book your tickets, and
-                            experience unforgettable moments with Gatherix.
-                        </p>
-
-                        <div className="mt-6 flex gap-3">
-
-                            <a
-                                href="#"
-                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-sm text-slate-400 transition hover:bg-white/10 hover:text-white"
-                            >
-                                f
-                            </a>
-
-                            <a
-                                href="#"
-                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-sm text-slate-400 transition hover:bg-white/10 hover:text-white"
-                            >
-                                X
-                            </a>
-
-                            <a
-                                href="#"
-                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-sm text-slate-400 transition hover:bg-white/10 hover:text-white"
-                            >
-                                in
-                            </a>
-
-                            <a
-                                href="#"
-                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-sm text-slate-400 transition hover:bg-white/10 hover:text-white"
-                            >
-                                ◎
-                            </a>
-
-                        </div>
-
-                    </div>
-
-                    {/* Explore */}
-                    <div>
-                        <h3 className="text-sm font-semibold">
-                            Explore
-                        </h3>
-
-                        <ul className="mt-4 space-y-3 text-sm text-slate-400">
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Discover Events
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Categories
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Trending Events
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Popular Near You
-                                </a>
-                            </li>
-
-                        </ul>
-                    </div>
-
-                    {/* For Organizers */}
-                    <div>
-                        <h3 className="text-sm font-semibold">
-                            For Organizers
-                        </h3>
-
-                        <ul className="mt-4 space-y-3 text-sm text-slate-400">
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Create an Event
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Organizer Dashboard
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Pricing
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Resources
-                                </a>
-                            </li>
-
-                        </ul>
-                    </div>
-
-                    <div>
-                        <h3 className="text-sm font-semibold">
-                            Company
-                        </h3>
-
-                        <ul className="mt-4 space-y-3 text-sm text-slate-400">
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    About Gatherix
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Contact Us
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Help Center
-                                </a>
-                            </li>
-
-                            <li>
-                                <a href="#" className="transition hover:text-black">
-                                    Careers
-                                </a>
-                            </li>
-
-                        </ul>
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div className="border-t border-white/10">
-
-                <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-5 text-sm text-black-500 md:flex-row md:items-center md:justify-between">
-
-                    <p>
-                        © 2026 Gatherix. All rights reserved.
-                    </p>
-
-                    <div className="flex gap-6">
-
-                        <a href="#" className="transition hover:text-white">
-                            Privacy Policy
-                        </a>
-
-                        <a href="#" className="transition hover:text-white">
-                            Terms of Service
-                        </a>
-
-                        <a href="#" className="transition hover:text-white">
-                            Cookie Policy2
-                        </a>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </footer>
-    )
+        {footerGroups.map((group) => (
+          <div key={group.title}>
+            <h2 className="text-sm font-extrabold text-ink">{group.title}</h2>
+            <ul className="mt-4 space-y-3">
+              {group.links.map((link) => (
+                <li key={link.label}><Link className="text-sm text-slate-600 transition hover:text-brand-primary" to={link.href}>{link.label}</Link></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-indigo-100/80">
+        <div className="page-container flex flex-col gap-2 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <p className="mb-0">© {new Date().getFullYear()} Gatherix. All rights reserved.</p>
+          <p className="mb-0">Discover. Book. Experience.</p>
+        </div>
+      </div>
+    </footer>
+  );
 }

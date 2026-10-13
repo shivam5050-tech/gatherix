@@ -1,9 +1,23 @@
-require("dotenv").config();
+const path = require("path");
+const dotenvResult = require("dotenv").config({ path: path.join(__dirname, ".env") });
+const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+
+if (dotenvResult.error) {
+    console.warn("Backend .env file was not loaded from the backend directory");
+}
+
+console.info("Razorpay test configuration:", {
+    keyIdPresent: Boolean(razorpayKeyId),
+    keyIdUsesTestMode: Boolean(razorpayKeyId?.startsWith("rzp_test_")),
+    keySecretPresent: Boolean(process.env.RAZORPAY_KEY_SECRET),
+});
+
 const express = require("express");
 const cors = require("cors");
 const connectdb = require('./config/db.js')
 const authRoutes = require("./routes/authRoutes.js");
 const eventRoutes = require('./routes/eventRoutes.js')
+const bookingRoutes = require("./routes/bookingRoutes.js");
 
 connectdb()
 const app = express();
@@ -14,6 +28,7 @@ app.use(express.json());
 
 app.use("/", authRoutes);
 app.use('/events',eventRoutes);
+app.use("/bookings", bookingRoutes);
 
 
 app.use((req, res) => {

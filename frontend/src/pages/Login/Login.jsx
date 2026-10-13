@@ -74,6 +74,8 @@ export function Login() {
                     );
                 }
 
+                window.dispatchEvent(new Event("gatherix-auth-change"));
+
                 alert("Login successful");
                 navigate("/");
 

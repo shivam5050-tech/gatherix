@@ -3,6 +3,7 @@ const express = require("express");
 const {
     createEvent,
     getAllEvents,
+    getMyEvents,
     getEventById,
     updateEvent,
     deleteEvent,
@@ -13,6 +14,8 @@ const router = express.Router();
 
 
 router.get("/", getAllEvents);
+
+router.get("/mine", authMiddleware, getMyEvents);
 
 router.get("/:id", getEventById);
 
