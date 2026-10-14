@@ -5,7 +5,9 @@ async function authenticatedBookingRequest(path, options = {}) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.message || "Could not complete the booking request.");
+    const error = new Error(data.message || "Could not complete the booking request.");
+    error.status = response.status;
+    throw error;
   }
 
   return data;
@@ -24,6 +26,16 @@ export async function createBooking(bookingData) {
 export async function getMyBookings() {
   const data = await authenticatedBookingRequest("/bookings/mine");
   return data.bookings;
+}
+
+export async function getEventBookings(eventId) {
+  return authenticatedBookingRequest(`/bookings/events/${eventId}`);
+}
+
+export async function cancelBooking(bookingId) {
+  return authenticatedBookingRequest(`/bookings/${bookingId}/cancel`, {
+    method: "POST",
+  });
 }
 
 export async function createRazorpayOrder(bookingId) {

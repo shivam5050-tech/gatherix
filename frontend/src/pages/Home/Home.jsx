@@ -59,11 +59,15 @@ export function Home() {
     () => [...new Set(events.map((event) => event.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     [events]
   );
+  const categories = useMemo(
+    () => [...new Set(events.map((event) => event.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [events]
+  );
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
-      const matchesCategory = !category || String(event.category || "").toLocaleLowerCase().includes(category.toLocaleLowerCase());
-      const matchesCity = !city || String(event.city || "").toLocaleLowerCase() === city.toLocaleLowerCase();
+      const matchesCategory = !category || String(event.category || "").trim().toLocaleLowerCase() === category.trim().toLocaleLowerCase();
+      const matchesCity = !city || String(event.city || "").trim().toLocaleLowerCase() === city.trim().toLocaleLowerCase();
       const matchesDate = !date || toLocalDateString(event.date) === date;
       return matchesCategory && matchesCity && matchesDate && eventMatchesText(event, query);
     });
@@ -87,6 +91,8 @@ export function Home() {
         onCityChange={setCity}
         date={date}
         onDateChange={setDate}
+        onClearFilters={resetFilters}
+        categories={categories}
         cities={cities}
       />
       <CategorySection
@@ -103,6 +109,9 @@ export function Home() {
       <PopularEvents
         events={filteredEvents}
         city={city}
+        loading={loading}
+        error={error}
+        onRetry={loadEvents}
       />
       <Features />
       <OrganizerCTA />

@@ -1,7 +1,6 @@
 import { useFormik } from "formik";
 import * as yup from "yup";
-import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const initialState = {
     email: "",
@@ -11,6 +10,7 @@ const initialState = {
 export function Login() {
 
     const navigate = useNavigate();
+    const location = useLocation();
 
     const formik = useFormik({
 
@@ -30,7 +30,7 @@ export function Login() {
 
 
 
-        onSubmit: async (values) => {
+        onSubmit: async (values, { setStatus }) => {
             try {
                 const response = await fetch(
                     "http://localhost:5000/login",
@@ -45,26 +45,18 @@ export function Login() {
 
                 const data = await response.json();
 
-                console.log("Login response:", data);
-
                 if (!response.ok) {
-                    alert(data.message || "Login failed");
+                    setStatus(data.message || "Login failed. Check your details and try again.");
                     return;
                 }
 
                 if (!data.token) {
-                    alert("Login worked, but the backend did not return a token.");
+                    setStatus("We could not complete sign in. Please try again.");
                     return;
                 }
 
                 // Save JWT token
                 localStorage.setItem("token", data.token);
-
-                console.log(
-                    "Token saved:",
-                    localStorage.getItem("token") !== null
-                );
-                console.log("Current origin:", window.location.origin);
 
                 // Save user details
                 if (data.user) {
@@ -76,12 +68,10 @@ export function Login() {
 
                 window.dispatchEvent(new Event("gatherix-auth-change"));
 
-                alert("Login successful");
                 navigate("/");
 
-            } catch (error) {
-                console.error("Login error:", error);
-                alert("Server error. Please try again.");
+            } catch {
+                setStatus("Could not connect to Gatherix. Check your connection and try again.");
             }
         }
 
@@ -96,6 +86,9 @@ export function Login() {
                 <h1 className="text-center font-bold text-2xl">
                     Sign in
                 </h1>
+
+                {location.state?.message && <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{location.state.message}</p>}
+                {formik.status && <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{formik.status}</p>}
 
                 <form onSubmit={formik.handleSubmit}>
 
@@ -114,7 +107,7 @@ export function Login() {
 
                         {formik.touched.email &&
                             formik.errors.email ? (
-                            <p>{formik.errors.email}</p>
+                            <p className="text-sm text-rose-700">{formik.errors.email}</p>
                         ) : null}
 
                     </div>
@@ -134,7 +127,7 @@ export function Login() {
 
                         {formik.touched.password &&
                             formik.errors.password ? (
-                            <p>{formik.errors.password}</p>
+                            <p className="text-sm text-rose-700">{formik.errors.password}</p>
                         ) : null}
 
                     </div>
@@ -142,9 +135,10 @@ export function Login() {
 
                     <button
                         type="submit"
-                        className="border rounded-sm py-2 px-4 font-bold mt-2 ml-20"
+                        className="border rounded-sm py-2 px-4 font-bold mt-2 ml-20 disabled:cursor-wait disabled:opacity-60"
+                        disabled={formik.isSubmitting}
                     >
-                        Login
+                        {formik.isSubmitting ? "Signing in..." : "Login"}
                     </button>
 
                     <p className="mt-4 text-center">

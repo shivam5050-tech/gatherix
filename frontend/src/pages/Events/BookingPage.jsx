@@ -32,6 +32,7 @@ export function BookingPage() {
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [errorStatus, setErrorStatus] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [attendeeName, setAttendeeName] = useState("");
   const [attendeeEmail, setAttendeeEmail] = useState("");
@@ -40,6 +41,7 @@ export function BookingPage() {
   const [booking, setBooking] = useState(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
   const isLoggedIn = Boolean(localStorage.getItem("token"));
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export function BookingPage() {
     return () => {
       isCurrentPage = false;
     };
-  }, [id]);
+  }, [id, retryCount]);
 
   const ticketsAvailable = Math.max(0, Number(event?.availableTickets) || 0);
   const ticketLimit = Math.min(10, ticketsAvailable);
@@ -83,6 +85,7 @@ export function BookingPage() {
     formEvent.preventDefault();
     setShowErrors(true);
     setError("");
+    setErrorStatus(null);
 
     if (!isLoggedIn) {
       setError("Please log in before creating a booking.");
@@ -103,6 +106,7 @@ export function BookingPage() {
       setEvent(result.event);
     } catch (requestError) {
       setError(requestError.message || "Could not create your booking. Please try again.");
+      setErrorStatus(requestError.status || null);
     } finally {
       setSubmitting(false);
     }
@@ -172,7 +176,10 @@ export function BookingPage() {
         <div className="page-container">
           <Link className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-brand-primary" to="/explore"><ArrowLeft size={16} /> Back to Explore</Link>
           {loading && <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-600" role="status">Loading checkout...</p>}
-          {!loading && error && <p className="rounded-2xl border border-rose-200 bg-white p-8 text-center text-rose-700">{error}</p>}
+          {!loading && error && <div className="rounded-2xl border border-rose-200 bg-white p-8 text-center">
+            <p className="mb-4 text-rose-700" role="alert">{error}</p>
+            <button className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => setRetryCount((count) => count + 1)} type="button">Try again</button>
+          </div>}
         </div>
       </section>
     );
@@ -218,7 +225,10 @@ export function BookingPage() {
 
         <form className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]" onSubmit={handleSubmit}>
           <div className="space-y-5">
-            {error && <p className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">{error}</p>}
+            {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+              <p className="mb-2">{errorStatus === 401 ? "Your session is missing or expired. Log in again before reserving tickets." : error}</p>
+              {errorStatus === 401 && <Link className="font-bold underline" to="/login">Log in</Link>}
+            </div>}
             {!isLoggedIn && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Please <Link className="font-bold underline" to="/login">log in</Link> before reserving tickets.</p>}
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="mb-5 flex items-center gap-2 text-lg font-extrabold"><Ticket className="text-brand-primary" size={19} /> Select tickets</h2>

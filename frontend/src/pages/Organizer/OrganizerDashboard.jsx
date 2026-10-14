@@ -38,6 +38,7 @@ export function OrganizerDashboard() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(isLoggedIn);
   const [error, setError] = useState("");
+  const [errorStatus, setErrorStatus] = useState(null);
   const [success, setSuccess] = useState("");
   const [editingEvent, setEditingEvent] = useState(null);
   const [editForm, setEditForm] = useState(null);
@@ -48,11 +49,13 @@ export function OrganizerDashboard() {
 
     setLoading(true);
     setError("");
+    setErrorStatus(null);
     try {
       const myEvents = await getMyEvents();
       setEvents(myEvents);
     } catch (requestError) {
       setError(requestError.message || "Could not load your events. Please log in again and try again.");
+      setErrorStatus(requestError.status || null);
     } finally {
       setLoading(false);
     }
@@ -66,6 +69,7 @@ export function OrganizerDashboard() {
     setEditingEvent(event);
     setEditForm(makeEditForm(event));
     setError("");
+    setErrorStatus(null);
     setSuccess("");
   }
 
@@ -99,6 +103,7 @@ export function OrganizerDashboard() {
 
     setSavingId(editingEvent._id);
     setError("");
+    setErrorStatus(null);
     setSuccess("");
     try {
       const updatedEvent = await updateEvent(editingEvent._id, {
@@ -115,6 +120,7 @@ export function OrganizerDashboard() {
       setSuccess(`“${updatedEvent.title}” was updated successfully.`);
     } catch (requestError) {
       setError(requestError.message || "Could not update the event. Please try again.");
+      setErrorStatus(requestError.status || null);
     } finally {
       setSavingId("");
     }
@@ -126,6 +132,7 @@ export function OrganizerDashboard() {
 
     setSavingId(event._id);
     setError("");
+    setErrorStatus(null);
     setSuccess("");
     try {
       await deleteEvent(event._id);
@@ -133,6 +140,7 @@ export function OrganizerDashboard() {
       setSuccess(`“${event.title}” was deleted successfully.`);
     } catch (requestError) {
       setError(requestError.message || "Could not delete the event. Please try again.");
+      setErrorStatus(requestError.status || null);
     } finally {
       setSavingId("");
     }
@@ -163,7 +171,10 @@ export function OrganizerDashboard() {
             </div>
 
             {success && <p className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900" role="status">{success}</p>}
-            {error && <p className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">{error}</p>}
+            {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+              <p className="mb-2">{errorStatus === 401 ? "Your session is missing or expired. Log in again to manage your events." : error}</p>
+              {errorStatus === 401 && <Link className="font-bold underline" to="/login">Log in</Link>}
+            </div>}
 
             <section aria-labelledby="my-events-heading">
               <div className="mb-4 flex items-center justify-between gap-4">
@@ -222,7 +233,8 @@ export function OrganizerDashboard() {
                               <p className="mb-1 text-sm text-slate-600">{formatDate(event.date)}</p>
                               <p className="mb-0 text-sm text-slate-600">{event.city || "City not set"} · {formatPrice(event.price)} · {event.availableTickets ?? "Not set"} tickets available</p>
                             </div>
-                            <div className="flex shrink-0 gap-2">
+                            <div className="flex shrink-0 flex-wrap gap-2">
+                              <Link className="inline-flex items-center rounded-xl bg-brand-primary px-3 py-2 text-sm font-bold text-white hover:bg-brand-primary-dark" to={`/organizer/events/${event._id}/bookings`}>View bookings</Link>
                               <button className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => startEditing(event)} type="button"><Pencil aria-hidden="true" size={16} /> Edit</button>
                               <button className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60" disabled={savingId === event._id} onClick={() => removeEvent(event)} type="button"><Trash2 aria-hidden="true" size={16} /> {savingId === event._id ? "Deleting..." : "Delete"}</button>
                             </div>

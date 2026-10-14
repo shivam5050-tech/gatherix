@@ -22,6 +22,7 @@ export function EventDetails() {
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let isCurrentPage = true;
@@ -61,7 +62,7 @@ export function EventDetails() {
     return () => {
       isCurrentPage = false;
     };
-  }, [id]);
+  }, [id, retryCount]);
 
   return (
     <div className="min-h-[60vh] bg-[#faf8ff] py-8 sm:py-12">
@@ -77,6 +78,7 @@ export function EventDetails() {
         {!loading && error && (
           <div className="rounded-2xl border border-rose-200 bg-white p-8 text-center">
             <p className="mb-4 text-rose-700">{error}</p>
+            <button className="mr-3 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => setRetryCount((count) => count + 1)} type="button">Try again</button>
             <Link className="inline-flex rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-primary-dark" to="/">Return to homepage</Link>
           </div>
         )}
@@ -117,9 +119,15 @@ export function EventDetails() {
                   </p>
                 )}
 
-                <Link className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-primary px-5 py-3 font-bold text-white transition hover:bg-brand-primary-dark" to={`/events/${id}/book`}>
-                  <Ticket aria-hidden="true" size={18} /> Book Tickets
-                </Link>
+                {event.availableTickets !== undefined && Number(event.availableTickets) <= 0 ? (
+                  <button className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 font-bold text-slate-600" disabled type="button">
+                    <Ticket aria-hidden="true" size={18} /> Sold out
+                  </button>
+                ) : (
+                  <Link className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-primary px-5 py-3 font-bold text-white transition hover:bg-brand-primary-dark" to={`/events/${id}/book`}>
+                    <Ticket aria-hidden="true" size={18} /> Book Tickets
+                  </Link>
+                )}
               </aside>
             </div>
           </article>

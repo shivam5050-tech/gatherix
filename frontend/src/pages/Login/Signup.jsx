@@ -1,6 +1,6 @@
 import { useFormik } from "formik";
 import * as yup from "yup";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const initialState = {
     email: "",
@@ -25,7 +25,7 @@ export function Signup() {
                 .required("Password is required")
         }),
 
-        onSubmit: async (values) => {
+        onSubmit: async (values, { setStatus }) => {
 
             try {
 
@@ -45,19 +45,16 @@ export function Signup() {
                 const data = await response.json();
 
                 if (!response.ok) {
-                    alert(data.message);
+                    setStatus(data.message || "Could not create your account. Please try again.");
                     return;
                 }
 
-                alert("Signup successful");
                 formik.resetForm();
-                navigate('/login');
+                navigate("/login", { state: { message: "Your account was created. Sign in to continue." } });
 
 
-            } catch (error) {
-
-                console.log(error);
-                alert("Server error");
+            } catch {
+                setStatus("Could not connect to Gatherix. Check your connection and try again.");
 
             }
         }
@@ -71,6 +68,8 @@ export function Signup() {
                 <h1 className="text-center font-bold text-2xl">
                     Sign up
                 </h1>
+
+                {formik.status && <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{formik.status}</p>}
 
                 <form onSubmit={formik.handleSubmit}>
 
@@ -88,7 +87,7 @@ export function Signup() {
 
                         {formik.touched.email &&
                         formik.errors.email ? (
-                            <p>{formik.errors.email}</p>
+                            <p className="text-sm text-rose-700">{formik.errors.email}</p>
                         ) : null}
                     </div>
 
@@ -106,17 +105,20 @@ export function Signup() {
 
                         {formik.touched.password &&
                         formik.errors.password ? (
-                            <p>{formik.errors.password}</p>
+                            <p className="text-sm text-rose-700">{formik.errors.password}</p>
                         ) : null}
                     </div>
 
 
                     <button
                         type="submit"
-                        className="border rounded-sm py-2 px-4 font-bold mt-2 ml-20"
+                        className="border rounded-sm py-2 px-4 font-bold mt-2 ml-20 disabled:cursor-wait disabled:opacity-60"
+                        disabled={formik.isSubmitting}
                     >
-                        Signup
+                        {formik.isSubmitting ? "Creating account..." : "Signup"}
                     </button>
+
+                    <p className="mt-4 text-center text-sm">Already have an account? <Link className="font-bold underline" to="/login">Log in</Link></p>
 
                 </form>
 

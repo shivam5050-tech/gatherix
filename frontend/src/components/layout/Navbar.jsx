@@ -3,9 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, ChevronDown, LogOut, Menu, UserRound, X } from "lucide-react";
 
 const navigation = [
-  { label: "Explore", href: "/explore" },
-  { label: "Concerts", href: "/#categories" },
-  { label: "Experiences", href: "/#features" },
+  { label: "Home", href: "/" },
+  { label: "About", href: "/about" },
 ];
 
 function readSavedUser() {

@@ -25,7 +25,9 @@ export const createEvent = async (eventData) => {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.message || "Could not create the event.");
+        const error = new Error(data.message || "Could not create the event.");
+        error.status = response.status;
+        throw error;
     }
 
     return data.event;
@@ -36,7 +38,9 @@ async function authenticatedEventRequest(path, options = {}) {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.message || "Could not complete the event request.");
+        const error = new Error(data.message || "Could not complete the event request.");
+        error.status = response.status;
+        throw error;
     }
 
     return data;

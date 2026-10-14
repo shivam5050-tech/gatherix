@@ -8,7 +8,7 @@ const filters = [
   { id: "free", label: "Free" },
 ];
 
-export function PopularEvents({ events = [], city = "" }) {
+export function PopularEvents({ events = [], city = "", loading = false, error = "", onRetry }) {
   const [activeFilter, setActiveFilter] = useState("all");
   const visibleEvents = useMemo(() => {
     const now = new Date();
@@ -42,7 +42,14 @@ export function PopularEvents({ events = [], city = "" }) {
           </div>
         </div>
 
-        {visibleEvents.length ? (
+        {loading ? (
+          <p className="rounded-2xl border border-slate-200 bg-[#faf9ff] px-5 py-8 text-center text-sm text-slate-600" role="status">Loading more event ideas...</p>
+        ) : error ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-8 text-center">
+            <p className="mb-3 text-sm text-rose-800">More events could not be loaded. Try again.</p>
+            <button className="rounded-xl border border-rose-300 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100" onClick={onRetry} type="button">Retry</button>
+          </div>
+        ) : visibleEvents.length ? (
           <div className="grid gap-4 lg:grid-cols-3">
             {visibleEvents.map((event) => <EventCard compact event={event} key={event._id || `${event.title}-${event.date}`} />)}
           </div>

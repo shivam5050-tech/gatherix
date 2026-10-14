@@ -11,7 +11,9 @@ function getRazorpayCredentials() {
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keyId || !keySecret || !keyId.startsWith("rzp_test_")) {
-        throw new Error("Razorpay test credentials are not configured on the server");
+        const error = new Error("Razorpay test credentials are not configured on the server");
+        error.kind = "configuration";
+        throw error;
     }
 
     return { keyId, keySecret };
@@ -41,22 +43,114 @@ function razorpayRequest(path, method, body, keyId, keySecret) {
                 try {
                     data = JSON.parse(responseBody || "{}");
                 } catch {
-                    return reject(new Error("Razorpay returned an invalid response"));
+                    const error = new Error("Razorpay returned an invalid response");
+                    error.kind = "invalid_response";
+                    error.statusCode = response.statusCode;
+                    return reject(error);
                 }
 
                 if (response.statusCode < 200 || response.statusCode >= 300) {
-                    return reject(new Error(data.error?.description || "Razorpay request failed"));
+                    const error = new Error("Razorpay API rejected the request");
+                    error.kind = "provider";
+                    error.statusCode = response.statusCode;
+                    error.providerCode = data.error?.code;
+                    error.providerDescription = data.error?.description;
+                    return reject(error);
                 }
 
                 return resolve(data);
             });
         });
 
-        request.setTimeout(15000, () => request.destroy(new Error("Razorpay request timed out")));
-        request.on("error", () => reject(new Error("Could not connect to Razorpay")));
+        request.setTimeout(15000, () => {
+            const error = new Error("Razorpay request timed out");
+            error.code = "ETIMEDOUT";
+            request.destroy(error);
+        });
+        request.on("error", (cause) => {
+            const error = new Error("Razorpay network request failed");
+            error.kind = "network";
+            error.cause = cause;
+            error.code = cause.code;
+            error.syscall = cause.syscall;
+            error.hostname = cause.hostname;
+            error.port = cause.port;
+            reject(error);
+        });
         if (requestBody) request.write(requestBody);
         request.end();
     });
+}
+
+function getSafeDiagnosticCode(value) {
+    return typeof value === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(value)
+        ? value
+        : undefined;
+}
+
+function sanitizeProviderDescription(value) {
+    if (typeof value !== "string") return undefined;
+
+    let description = value
+        .replace(/[\u0000-\u001f\u007f]+/g, " ")
+        .replace(/rzp_(?:test|live)_[A-Za-z0-9]+/gi, "[redacted Razorpay key]")
+        .replace(/(authorization|api[_ -]?key|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]");
+
+    for (const credential of [process.env.RAZORPAY_KEY_ID, process.env.RAZORPAY_KEY_SECRET]) {
+        if (typeof credential === "string" && credential.length >= 8) {
+            description = description.split(credential).join("[redacted credential]");
+        }
+    }
+
+    return description.slice(0, 240);
+}
+
+function respondToRazorpayError(error, res, operation) {
+    const cause = error.cause || error;
+    const networkCode = cause.code || error.code;
+    const category = error.kind === "network"
+        ? (/TLS|CERT|SSL|LEAF_SIGNATURE/i.test(networkCode || "")
+            ? "tls"
+            : (["ENOTFOUND", "EAI_AGAIN", "EAI_FAIL"].includes(networkCode)
+                ? "dns"
+                : (networkCode === "ETIMEDOUT" ? "timeout" : "network")))
+        : (error.kind || "application");
+    const diagnostic = {
+        category,
+        errorName: getSafeDiagnosticCode(error.name),
+        errorCode: getSafeDiagnosticCode(error.code),
+        causeCode: getSafeDiagnosticCode(cause.code),
+        httpStatus: Number.isInteger(error.statusCode) ? error.statusCode : undefined,
+        providerCode: getSafeDiagnosticCode(error.providerCode),
+        providerDescription: sanitizeProviderDescription(error.providerDescription),
+        networkCode: getSafeDiagnosticCode(networkCode),
+        syscall: getSafeDiagnosticCode(cause.syscall || error.syscall),
+        hostname: "api.razorpay.com",
+        port: Number.isInteger(cause.port || error.port) ? cause.port || error.port : 443,
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+        console.error(`Razorpay ${operation} failed`, diagnostic);
+    }
+
+    if (error.kind === "network") {
+        return res.status(503).json({ message: "Could not reach the payment provider. Please try again later." });
+    }
+
+    if (error.kind === "configuration") {
+        return res.status(503).json({ message: "Online payments are temporarily unavailable. Please try again later." });
+    }
+
+    if (error.kind === "provider" && [401, 403].includes(error.statusCode)) {
+        return res.status(502).json({ message: "The payment provider rejected the server configuration. Please contact support." });
+    }
+
+    if (error.kind === "provider" && error.statusCode === 400) {
+        return res.status(502).json({ message: "The payment provider rejected the order details. Please try again or contact support." });
+    }
+
+    return res.status(error.kind === "provider" || error.kind === "invalid_response" ? 502 : 500)
+        .json({ message: "The payment request could not be completed. Please try again later." });
 }
 
 function sameSignature(expected, received) {
@@ -140,7 +234,7 @@ const createBooking = async (req, res) => {
 const getMyBookings = async (req, res) => {
     try {
         const bookings = await Booking.find({ user: req.user._id })
-            .populate("event", "title date location city image")
+            .populate("event", "title date location city image availableTickets")
             .sort({ createdAt: -1 });
 
         return res.status(200).json({
@@ -151,6 +245,174 @@ const getMyBookings = async (req, res) => {
         return res.status(500).json({
             message: "Could not fetch your bookings",
             error: error.message,
+        });
+    }
+};
+
+// Return booking details only to the event's organizer or an administrator.
+const getEventBookings = async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.eventId)) {
+        return res.status(404).json({ message: "Event not found" });
+    }
+
+    try {
+        const event = await Event.findById(req.params.eventId)
+            .select("title date location city price organizer");
+
+        if (!event) {
+            return res.status(404).json({ message: "Event not found" });
+        }
+
+        const isAdmin = req.user.role === "admin";
+        const isOwner = event.organizer?.toString() === req.user._id.toString();
+        if (!isAdmin && !isOwner) {
+            return res.status(403).json({ message: "Only the event organizer or an administrator can view these bookings" });
+        }
+
+        const bookings = await Booking.find({ event: event._id })
+            .select("attendeeName attendeeEmail ticketQuantity subtotal bookingStatus paymentStatus createdAt")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            event: {
+                _id: event._id,
+                title: event.title,
+                date: event.date,
+                location: event.location,
+                city: event.city,
+                price: event.price,
+            },
+            count: bookings.length,
+            bookings,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Could not fetch bookings for this event",
+            error: error.message,
+        });
+    }
+};
+
+// Cancel an unpaid booking and release its reserved tickets exactly once.
+const cancelBooking = async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+        return res.status(404).json({ message: "Booking not found" });
+    }
+
+    try {
+        let booking = await Booking.findOne({ _id: req.params.id, user: req.user._id });
+
+        if (!booking) {
+            return res.status(404).json({ message: "Booking not found" });
+        }
+
+        if (booking.paymentStatus === "paid" || booking.bookingStatus === "confirmed") {
+            return res.status(409).json({ message: "Paid bookings cannot be cancelled through this flow" });
+        }
+
+        if (booking.bookingStatus === "cancelled") {
+            return res.status(200).json({
+                message: "This booking is already cancelled.",
+                booking,
+                alreadyCancelled: true,
+            });
+        }
+
+        if (booking.bookingStatus === "pending") {
+            booking = await Booking.findOneAndUpdate(
+                {
+                    _id: booking._id,
+                    user: req.user._id,
+                    bookingStatus: "pending",
+                    paymentStatus: "unpaid",
+                },
+                { $set: { bookingStatus: "cancelling" } },
+                { new: true }
+            );
+
+            if (!booking) {
+                booking = await Booking.findOne({ _id: req.params.id, user: req.user._id });
+                if (!booking) {
+                    return res.status(404).json({ message: "Booking not found" });
+                }
+                if (booking.paymentStatus === "paid" || booking.bookingStatus === "confirmed") {
+                    return res.status(409).json({ message: "Paid bookings cannot be cancelled through this flow" });
+                }
+                if (booking.bookingStatus === "cancelled") {
+                    return res.status(200).json({ message: "This booking is already cancelled.", booking, alreadyCancelled: true });
+                }
+            }
+        }
+
+        if (booking.bookingStatus !== "cancelling" || booking.paymentStatus !== "unpaid") {
+            return res.status(409).json({ message: "This booking cannot be cancelled in its current state" });
+        }
+
+        const eventExists = await Event.exists({ _id: booking.event });
+        if (eventExists) {
+            const releasedEvent = await Event.findOneAndUpdate(
+                {
+                    _id: booking.event,
+                    ticketReleaseBookingIds: { $ne: booking._id },
+                    $expr: {
+                        $and: [
+                            { $gte: ["$availableTickets", 0] },
+                            { $lte: [{ $add: ["$availableTickets", booking.ticketQuantity] }, "$totalTickets"] },
+                        ],
+                    },
+                },
+                {
+                    $inc: { availableTickets: booking.ticketQuantity },
+                    $addToSet: { ticketReleaseBookingIds: booking._id },
+                },
+                { new: true }
+            );
+
+            if (!releasedEvent) {
+                const alreadyReleased = await Event.exists({
+                    _id: booking.event,
+                    ticketReleaseBookingIds: booking._id,
+                });
+
+                if (!alreadyReleased) {
+                    return res.status(409).json({
+                        message: "Tickets could not be released because the event inventory changed. Please retry or contact support.",
+                    });
+                }
+            }
+        }
+
+        let cancelledBooking = await Booking.findOneAndUpdate(
+            {
+                _id: booking._id,
+                user: req.user._id,
+                bookingStatus: "cancelling",
+                paymentStatus: "unpaid",
+            },
+            { $set: { bookingStatus: "cancelled" } },
+            { new: true }
+        );
+
+        if (!cancelledBooking) {
+            cancelledBooking = await Booking.findOne({ _id: booking._id, user: req.user._id });
+            if (cancelledBooking?.bookingStatus !== "cancelled" || cancelledBooking.paymentStatus !== "unpaid") {
+                return res.status(409).json({ message: "Booking state changed while cancellation was finishing. Please refresh and retry." });
+            }
+        }
+
+        const event = await Event.findById(booking.event).select("availableTickets");
+        return res.status(200).json({
+            message: "Booking cancelled and reserved tickets released.",
+            booking: cancelledBooking,
+            availableTickets: event?.availableTickets,
+        });
+    } catch (error) {
+        console.error("Booking cancellation failed", {
+            name: error.name,
+            code: typeof error.code === "string" ? error.code : undefined,
+        });
+        return res.status(500).json({
+            message: "Cancellation is still processing. Refresh your bookings and retry if it remains in progress.",
         });
     }
 };
@@ -232,7 +494,7 @@ const createPaymentOrder = async (req, res) => {
             currency: booking.razorpayCurrency,
         });
     } catch (error) {
-        return res.status(500).json({ message: error.message || "Could not create a payment order" });
+        return respondToRazorpayError(error, res, "order creation");
     }
 };
 
@@ -315,13 +577,15 @@ const verifyPayment = async (req, res) => {
 
         return res.status(200).json({ booking: updatedBooking, alreadyVerified: false });
     } catch (error) {
-        return res.status(500).json({ message: error.message || "Could not verify payment" });
+        return respondToRazorpayError(error, res, "payment verification");
     }
 };
 
 module.exports = {
     createBooking,
     getMyBookings,
+    getEventBookings,
+    cancelBooking,
     createPaymentOrder,
     verifyPayment,
 };

@@ -19,6 +19,7 @@ export function Profile() {
   function logOut() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    window.dispatchEvent(new Event("gatherix-auth-change"));
     setIsLoggedIn(false);
     setUser(null);
     navigate("/login");
@@ -33,8 +34,8 @@ export function Profile() {
         {!isLoggedIn ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <h2 className="text-xl font-extrabold">You’re not logged in</h2>
-            <p className="text-sm leading-6 text-slate-600">Log in to view the account information saved by this app.</p>
-            <p className="mb-4 text-xs text-slate-500">This is a frontend-only check and does not securely protect a route.</p>
+            <p className="text-sm leading-6 text-slate-600">Log in to view account details saved in this browser.</p>
+            <p className="mb-4 text-xs text-slate-500">Your booking and organizer data is still checked by the server when requested.</p>
             <Link className="inline-flex rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-white hover:bg-brand-primary-dark" to="/login">Go to login</Link>
           </div>
         ) : (
@@ -50,11 +51,7 @@ export function Profile() {
             </div>
 
             <dl className="mt-7 grid gap-4 rounded-xl bg-[#f8f7ff] p-4 sm:grid-cols-2 sm:p-5">
-              <div>
-                <dt className="text-xs font-semibold text-slate-500">Name</dt>
-                <dd className="mb-0 mt-1 text-sm font-semibold text-slate-800">{user?.name || "Not provided"}</dd>
-              </div>
-              <div>
+              <div className="sm:col-span-2">
                 <dt className="text-xs font-semibold text-slate-500">Email</dt>
                 <dd className="mb-0 mt-1 break-all text-sm font-semibold text-slate-800">{user?.email || "Not available"}</dd>
               </div>

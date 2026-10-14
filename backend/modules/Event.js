@@ -48,6 +48,12 @@ const eventSchema = new mongoose.Schema(
             required: true,
         },
 
+        ticketReleaseBookingIds: {
+            type: [{ type: mongoose.Schema.Types.ObjectId }],
+            default: [],
+            select: false,
+        },
+
         image: {
             type: String,
             default: "",

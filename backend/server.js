@@ -12,6 +12,10 @@ console.info("Razorpay test configuration:", {
     keySecretPresent: Boolean(process.env.RAZORPAY_KEY_SECRET),
 });
 
+const usesSystemCa = process.execArgv.includes("--use-system-ca")
+    || /(?:^|\s)--use-system-ca(?:\s|$)/.test(process.env.NODE_OPTIONS || "");
+console.info("Node system CA store enabled:", usesSystemCa);
+
 const express = require("express");
 const cors = require("cors");
 const connectdb = require('./config/db.js')

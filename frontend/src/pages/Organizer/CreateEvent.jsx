@@ -24,6 +24,7 @@ function formatPrice(value) {
 export function CreateEvent() {
   const [eventForm, setEventForm] = useState(emptyEvent);
   const [error, setError] = useState("");
+  const [errorStatus, setErrorStatus] = useState(null);
   const [createdEvent, setCreatedEvent] = useState(null);
   const [saving, setSaving] = useState(false);
   const isLoggedIn = Boolean(localStorage.getItem("token"));
@@ -32,12 +33,14 @@ export function CreateEvent() {
     const { name, value } = changeEvent.target;
     setEventForm({ ...eventForm, [name]: value });
     setError("");
+    setErrorStatus(null);
     setCreatedEvent(null);
   }
 
   async function handleSubmit(submitEvent) {
     submitEvent.preventDefault();
     setError("");
+    setErrorStatus(null);
     setCreatedEvent(null);
 
     const ticketPrice = Number(eventForm.price);
@@ -71,6 +74,7 @@ export function CreateEvent() {
       setCreatedEvent(savedEvent);
     } catch (requestError) {
       setError(requestError.message || "Could not create the event. Please try again.");
+      setErrorStatus(requestError.status || null);
     } finally {
       setSaving(false);
     }
@@ -110,7 +114,10 @@ export function CreateEvent() {
           </div>
         )}
 
-        {error && <p className="mb-6 rounded-xl border border-rose-200 bg-white p-4 text-sm text-rose-700" role="alert">{error}</p>}
+        {error && <div className="mb-6 rounded-xl border border-rose-200 bg-white p-4 text-sm text-rose-700" role="alert">
+          <p className="mb-2">{errorStatus === 401 ? "Your session is missing or expired. Log in again to create an event." : error}</p>
+          {errorStatus === 401 && <Link className="font-bold underline" to="/login">Log in</Link>}
+        </div>}
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <form className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" onSubmit={handleSubmit}>

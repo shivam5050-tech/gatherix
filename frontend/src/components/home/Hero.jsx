@@ -2,8 +2,6 @@ import { useState } from "react";
 import { CalendarDays, ChevronDown, MapPin, Search, Sparkles, Tag } from "lucide-react";
 import bg from "../../assets/bg.jpg";
 
-const categoryOptions = ["Music", "Technology", "Business", "Arts", "Sports", "Food", "Workshops", "Lifestyle"];
-
 export function Hero({
   query,
   onQueryChange,
@@ -13,13 +11,12 @@ export function Hero({
   onCityChange,
   date,
   onDateChange,
+  onClearFilters,
+  categories = [],
   cities = [],
 }) {
-  const [submitted, setSubmitted] = useState(false);
-
   const handleSubmit = (event) => {
     event.preventDefault();
-    setSubmitted(true);
     document.getElementById("events")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -58,7 +55,7 @@ export function Hero({
                 <span className="relative mt-1 block">
                   <select className="w-full appearance-none bg-transparent pr-5 text-sm font-semibold text-ink outline-none" onChange={(event) => onCategoryChange(event.target.value)} value={category}>
                     <option value="">All categories</option>
-                    {categoryOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                    {categories.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                   <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-0 top-0.5 text-slate-500" size={16} />
                 </span>
@@ -89,9 +86,12 @@ export function Hero({
           </div>
           <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 px-1 pt-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="mb-0 text-xs leading-5 text-slate-500">Search filters the events currently loaded in this page.</p>
-            <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-primary to-brand-violet px-6 py-3 text-sm font-extrabold text-white shadow-md shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-lg" type="submit">
-              <Search aria-hidden="true" size={16} /> {submitted ? "Update results" : "Explore events"}
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {(query || category || city || date) && <button className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-violet-50" onClick={onClearFilters} type="button">Clear search filters</button>}
+              <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-primary to-brand-violet px-6 py-3 text-sm font-extrabold text-white shadow-md shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-lg" type="submit">
+                <Search aria-hidden="true" size={16} /> View matching events
+              </button>
+            </div>
           </div>
         </form>
       </div>
