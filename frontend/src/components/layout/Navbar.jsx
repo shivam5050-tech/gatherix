@@ -4,6 +4,7 @@ import { ArrowUpRight, ChevronDown, LogOut, Menu, UserRound, X } from "lucide-re
 
 const navigation = [
   { label: "Home", href: "/" },
+  { label: "Explore", href: "/explore" },
   { label: "About", href: "/about" },
 ];
 

@@ -2,22 +2,33 @@
 const Users = require("../modules/userSchema.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { sendWelcomeEmail } = require("../services/emailService");
 
 // Signup
 async function signup(req, res, next) {
     try {
-        const { password } = req.body;
-        const email = req.body.email?.trim().toLowerCase();
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        const password = body.password;
+        const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
-        if (!email || !password) {
+        if (!name || !email || !password) {
             return res.status(400).json({
-                message: "Email and password are required",
+                message: "Name, email, and password are required",
             });
         }
 
-        if (password.length < 6) {
+        if (name.length > 100) {
+            return res.status(400).json({ message: "Name must be 100 characters or fewer" });
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ message: "Please enter a valid email address" });
+        }
+
+        if (typeof password !== "string" || password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
             return res.status(400).json({
-                message: "Password must be at least 6 characters",
+                message: "Password must be at least 8 characters and include uppercase, lowercase, and a number",
             });
         }
 
@@ -29,16 +40,31 @@ async function signup(req, res, next) {
             });
         }
 
-        const user = await Users.create({ email, password });
+        const user = await Users.create({ name, email, password });
+        let welcomeEmailSent = false;
+
+        try {
+            welcomeEmailSent = await sendWelcomeEmail(user.email, user.name);
+        } catch (emailError) {
+            // Do not let mail provider details or a delivery failure affect signup.
+            console.error("Welcome email could not be sent", { code: emailError.code || "EMAIL_SEND_FAILED" });
+        }
 
         return res.status(201).json({
-            message: "Signup successful",
+            message: welcomeEmailSent
+                ? "Signup successful. A welcome email is on its way."
+                : "Signup successful, but the welcome email could not be sent. You can still log in.",
+            welcomeEmailSent,
             user: {
                 id: user._id,
+                name: user.name,
                 email: user.email,
             },
         });
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(409).json({ message: "Email already registered" });
+        }
         next(error);
     }
 }
@@ -46,10 +72,11 @@ async function signup(req, res, next) {
 // Login
 async function login(req, res, next) {
     try {
-        const { password } = req.body;
-        const email = req.body.email?.trim().toLowerCase();
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const password = body.password;
+        const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
-        if (!email || !password) {
+        if (!email || typeof password !== "string" || !password) {
             return res.status(400).json({
                 message: "Email and password are required",
             });

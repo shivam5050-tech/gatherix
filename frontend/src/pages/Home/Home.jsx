@@ -116,7 +116,7 @@ export function Home() {
       <Features />
       <OrganizerCTA />
       <Testimonials />
-      <Newsletter />
+      {/* <Newsletter /> */}
     </>
   );
 }
