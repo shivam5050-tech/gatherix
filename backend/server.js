@@ -1,10 +1,13 @@
 const path = require("path");
-const dotenvResult = require("dotenv").config({ path: path.join(__dirname, ".env") });
+const dotenvResult = require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
 
 if (dotenvResult.error) {
     console.warn("Backend .env file was not loaded from the backend directory");
 }
+
+const { getEmailEnvironmentStatus } = require("./services/emailService.js");
+console.info("Email environment variable presence:", getEmailEnvironmentStatus());
 
 console.info("Razorpay test configuration:", {
     keyIdPresent: Boolean(razorpayKeyId),
