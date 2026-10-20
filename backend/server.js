@@ -25,6 +25,7 @@ const connectdb = require('./config/db.js')
 const authRoutes = require("./routes/authRoutes.js");
 const eventRoutes = require('./routes/eventRoutes.js')
 const bookingRoutes = require("./routes/bookingRoutes.js");
+const adminRoutes = require("./routes/adminRoutes.js");
 
 connectdb()
 const app = express();
@@ -36,6 +37,7 @@ app.use(express.json());
 app.use("/", authRoutes);
 app.use('/events',eventRoutes);
 app.use("/bookings", bookingRoutes);
+app.use("/admin", adminRoutes);
 
 
 app.use((req, res) => {

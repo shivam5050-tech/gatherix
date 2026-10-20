@@ -91,6 +91,10 @@ async function login(req, res, next) {
             });
         }
 
+        if (user.status && user.status !== "active") {
+            return res.status(401).json({ message: "This account is suspended. Contact support for assistance." });
+        }
+
         const isPasswordValid = await bcrypt.compare(
             password,
             user.password
@@ -114,6 +118,7 @@ async function login(req, res, next) {
             user: {
                 id: user._id,
                 email: user.email,
+                role: user.role,
             },
         });
     } catch (error) {

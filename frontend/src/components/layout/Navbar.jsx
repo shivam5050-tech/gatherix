@@ -44,6 +44,8 @@ function ProfileDropdown({ user, isOpen, onToggle, onClose, onLogout, mobile = f
           </div>
           <Link className="mt-1 block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-violet-50 hover:text-brand-primary" onClick={onClose} role="menuitem" to="/profile">My Profile</Link>
           <Link className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-violet-50 hover:text-brand-primary" onClick={onClose} role="menuitem" to="/my-bookings">My Bookings</Link>
+          {user?.role === "admin" && <Link className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-violet-50 hover:text-brand-primary" onClick={onClose} role="menuitem" to="/admin">Admin Dashboard</Link>}
+          {user?.role === "admin" && <Link className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-violet-50 hover:text-brand-primary" onClick={onClose} role="menuitem" to="/admin/users">Manage Users</Link>}
           <Link className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-violet-50 hover:text-brand-primary" onClick={onClose} role="menuitem" to="/organizer">Organizer Dashboard</Link>
           <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50" onClick={onLogout} role="menuitem" type="button"><LogOut aria-hidden="true" size={16} /> Log Out</button>
         </div>

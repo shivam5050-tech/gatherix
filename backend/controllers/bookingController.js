@@ -6,6 +6,17 @@ const Event = require("../modules/Event");
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function createTicketToken() {
+    return crypto.randomBytes(32).toString("base64url");
+}
+
+function withoutTicketToken(booking) {
+    if (!booking) return booking;
+    const result = typeof booking.toObject === "function" ? booking.toObject() : { ...booking };
+    delete result.ticketToken;
+    return result;
+}
+
 function getRazorpayCredentials() {
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -188,19 +199,21 @@ const createBooking = async (req, res) => {
     try {
         // This single update only succeeds when enough tickets remain.
         const event = await Event.findOneAndUpdate(
-            { _id: eventId, availableTickets: { $gte: ticketQuantity } },
+            { _id: eventId, status: "published", availableTickets: { $gte: ticketQuantity } },
             { $inc: { availableTickets: -ticketQuantity } },
             { new: true }
         );
 
         if (!event) {
             const eventExists = await Event.exists({ _id: eventId });
-            return res.status(eventExists ? 400 : 404).json({
-                message: eventExists ? "Not enough tickets are available" : "Event not found",
+            const existingEvent = eventExists ? await Event.findById(eventId).select("status availableTickets") : null;
+            return res.status(!existingEvent ? 404 : existingEvent.status !== "published" ? 409 : 400).json({
+                message: !existingEvent ? "Event not found" : existingEvent.status !== "published" ? "This event is not available for booking" : "Not enough tickets are available",
             });
         }
 
         ticketsReserved = true;
+        const isFreeEvent = event.price === 0;
         const booking = await Booking.create({
             event: event._id,
             user: req.user._id,
@@ -209,13 +222,14 @@ const createBooking = async (req, res) => {
             attendeeEmail: cleanEmail,
             pricePerTicket: event.price,
             subtotal: event.price * ticketQuantity,
-            bookingStatus: "pending",
-            paymentStatus: "unpaid",
+            bookingStatus: isFreeEvent ? "confirmed" : "pending",
+            paymentStatus: isFreeEvent ? "not_required" : "unpaid",
+            ...(isFreeEvent ? { ticketToken: createTicketToken() } : {}),
         });
 
         return res.status(201).json({
-            message: "Booking created. Payment is still pending.",
-            booking,
+            message: isFreeEvent ? "Free booking confirmed. Ticket issued." : "Booking created. Payment is still pending.",
+            booking: withoutTicketToken(booking),
             event,
         });
     } catch (error) {
@@ -234,12 +248,48 @@ const createBooking = async (req, res) => {
 const getMyBookings = async (req, res) => {
     try {
         const bookings = await Booking.find({ user: req.user._id })
-            .populate("event", "title date location city image availableTickets")
-            .sort({ createdAt: -1 });
+            .select("_id event ticketQuantity subtotal bookingStatus paymentStatus paymentVerifiedAt createdAt +ticketToken")
+            .populate("event", "title date location city image status totalTickets availableTickets")
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const paymentCandidates = bookings.filter((booking) => booking.bookingStatus === "pending"
+            && booking.paymentStatus === "unpaid" && booking.event?._id);
+        const eventIds = [...new Map(paymentCandidates.map((booking) => [booking.event._id.toString(), booking.event._id])).values()];
+        const reservedCounts = eventIds.length ? await Booking.aggregate([
+            { $match: { event: { $in: eventIds }, bookingStatus: { $in: ["pending", "cancelling", "confirmed"] } } },
+            { $group: { _id: "$event", reservedTickets: { $sum: "$ticketQuantity" } } },
+        ]) : [];
+        const reservedByEvent = new Map(reservedCounts.map((item) => [item._id.toString(), item.reservedTickets]));
+
+        const safeBookings = bookings.map((booking) => {
+            const isPaidAndVerified = booking.paymentStatus === "paid"
+                && booking.bookingStatus === "confirmed"
+                && booking.paymentVerifiedAt instanceof Date;
+            const isFreeAndConfirmed = booking.paymentStatus === "not_required"
+                && booking.bookingStatus === "confirmed"
+                && booking.subtotal === 0;
+            return {
+                ...booking,
+                paymentEligible: booking.bookingStatus === "pending"
+                    && booking.paymentStatus === "unpaid"
+                    && Boolean(booking.event)
+                    && booking.event.status === "published"
+                    && Number.isSafeInteger(booking.ticketQuantity)
+                    && Number.isSafeInteger(booking.event.totalTickets)
+                    && Number.isSafeInteger(booking.event.availableTickets)
+                    && Number.isSafeInteger(reservedByEvent.get(booking.event._id.toString()))
+                    && reservedByEvent.get(booking.event._id.toString()) >= booking.ticketQuantity
+                    && reservedByEvent.get(booking.event._id.toString()) <= booking.event.totalTickets
+                    && booking.event.availableTickets >= 0
+                    && booking.event.availableTickets + reservedByEvent.get(booking.event._id.toString()) <= booking.event.totalTickets,
+                ticketToken: isPaidAndVerified || isFreeAndConfirmed ? booking.ticketToken : undefined,
+            };
+        });
 
         return res.status(200).json({
-            count: bookings.length,
-            bookings,
+            count: safeBookings.length,
+            bookings: safeBookings,
         });
     } catch (error) {
         return res.status(500).json({
@@ -424,7 +474,6 @@ const createPaymentOrder = async (req, res) => {
     }
 
     try {
-        const { keyId, keySecret } = getRazorpayCredentials();
         let booking = await Booking.findOne({ _id: req.params.id, user: req.user._id });
 
         if (!booking) {
@@ -435,9 +484,28 @@ const createPaymentOrder = async (req, res) => {
             return res.status(409).json({ message: "This booking is not awaiting payment" });
         }
 
-        if (booking.paymentStatus === "paid" || booking.bookingStatus === "confirmed") {
-            return res.status(409).json({ message: "This booking has already been paid" });
+        const event = await Event.findById(booking.event).select("status totalTickets availableTickets");
+        if (!event || event.status !== "published") {
+            return res.status(409).json({ message: "This event is no longer accepting payments. Contact support if you already paid." });
         }
+
+        const [reservation] = await Booking.aggregate([
+            { $match: { event: event._id, bookingStatus: { $in: ["pending", "cancelling", "confirmed"] } } },
+            { $group: { _id: null, reservedTickets: { $sum: "$ticketQuantity" } } },
+        ]);
+        const reservedTickets = reservation?.reservedTickets;
+        if (!Number.isSafeInteger(booking.ticketQuantity)
+            || !Number.isSafeInteger(event.totalTickets)
+            || !Number.isSafeInteger(event.availableTickets)
+            || !Number.isSafeInteger(reservedTickets)
+            || reservedTickets < booking.ticketQuantity
+            || reservedTickets > event.totalTickets
+            || event.availableTickets < 0
+            || event.availableTickets + reservedTickets > event.totalTickets) {
+            return res.status(409).json({ message: "This booking’s ticket reservation is no longer available. Refresh your bookings or contact support." });
+        }
+
+        const { keyId, keySecret } = getRazorpayCredentials();
 
         if (!booking.razorpayOrderId) {
             const amount = Math.round(booking.subtotal * 100);
@@ -512,7 +580,7 @@ const verifyPayment = async (req, res) => {
 
     try {
         const { keyId, keySecret } = getRazorpayCredentials();
-        const booking = await Booking.findOne({ _id: req.params.id, user: req.user._id });
+        let booking = await Booking.findOne({ _id: req.params.id, user: req.user._id }).select("+ticketToken");
 
         if (!booking) {
             return res.status(404).json({ message: "Booking not found" });
@@ -520,10 +588,21 @@ const verifyPayment = async (req, res) => {
 
         if (booking.paymentStatus === "paid" && booking.bookingStatus === "confirmed") {
             if (booking.razorpayOrderId === razorpayOrderId && booking.razorpayPaymentId === razorpayPaymentId) {
-                return res.status(200).json({ booking, alreadyVerified: true });
+                if (booking.paymentVerifiedAt && !booking.ticketToken) {
+                    booking = await Booking.findOneAndUpdate(
+                        { _id: booking._id, bookingStatus: "confirmed", paymentStatus: "paid", paymentVerifiedAt: { $type: "date" }, ticketToken: { $exists: false } },
+                        { $set: { ticketToken: createTicketToken() } },
+                        { new: true }
+                    ).select("+ticketToken") || await Booking.findById(booking._id).select("+ticketToken");
+                }
+                return res.status(200).json({ booking: withoutTicketToken(booking), alreadyVerified: true });
             }
 
             return res.status(409).json({ message: "This booking has already been verified with another payment" });
+        }
+
+        if (booking.paymentStatus !== "unpaid" || booking.bookingStatus !== "pending") {
+            return res.status(409).json({ message: "This booking is not awaiting payment" });
         }
 
         if (booking.razorpayOrderId !== razorpayOrderId) {
@@ -561,6 +640,7 @@ const verifyPayment = async (req, res) => {
                     paymentStatus: "paid",
                     razorpayPaymentId,
                     paymentVerifiedAt: new Date(),
+                    ticketToken: createTicketToken(),
                 },
             },
             { new: true }
@@ -569,15 +649,52 @@ const verifyPayment = async (req, res) => {
         if (!updatedBooking) {
             const currentBooking = await Booking.findOne({ _id: booking._id, user: req.user._id });
             if (currentBooking?.paymentStatus === "paid" && currentBooking.razorpayPaymentId === razorpayPaymentId) {
-                return res.status(200).json({ booking: currentBooking, alreadyVerified: true });
+                return res.status(200).json({ booking: withoutTicketToken(currentBooking), alreadyVerified: true });
             }
 
             return res.status(409).json({ message: "Booking payment state changed. Please refresh and try again." });
         }
 
-        return res.status(200).json({ booking: updatedBooking, alreadyVerified: false });
+        return res.status(200).json({ booking: withoutTicketToken(updatedBooking), alreadyVerified: false });
     } catch (error) {
         return respondToRazorpayError(error, res, "payment verification");
+    }
+};
+
+// The unguessable token is the credential; no booking ID is accepted as proof.
+const verifyTicket = async (req, res) => {
+    const { token } = req.body || {};
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+        return res.status(400).json({ message: "Invalid ticket token" });
+    }
+
+    try {
+        const booking = await Booking.findOne({ ticketToken: token })
+            .select("_id event ticketQuantity bookingStatus paymentStatus paymentVerifiedAt subtotal +ticketToken")
+            .populate({ path: "event", select: "title date location city status" })
+            .lean();
+
+        if (!booking) return res.status(404).json({ valid: false, message: "Ticket not found" });
+        const paymentIsValid = booking.paymentStatus === "paid"
+            ? booking.paymentVerifiedAt instanceof Date
+            : booking.paymentStatus === "not_required" && booking.subtotal === 0;
+        const eventIsAvailable = Boolean(booking.event) && booking.event.status !== "cancelled";
+        const valid = booking.bookingStatus === "confirmed" && paymentIsValid && eventIsAvailable;
+        return res.status(200).json({
+            valid,
+            ticketStatus: valid ? "valid" : booking.bookingStatus === "cancelled" ? "cancelled" : booking.event?.status === "cancelled" ? "event_cancelled" : "invalid",
+            bookingReference: booking._id.toString(),
+            ticketQuantity: booking.ticketQuantity,
+            bookingStatus: booking.bookingStatus,
+            event: booking.event ? {
+                title: booking.event.title,
+                date: booking.event.date,
+                location: booking.event.location,
+                city: booking.event.city,
+            } : null,
+        });
+    } catch {
+        return res.status(500).json({ message: "Could not verify this ticket. Please try again." });
     }
 };
 
@@ -588,4 +705,5 @@ module.exports = {
     cancelBooking,
     createPaymentOrder,
     verifyPayment,
+    verifyTicket,
 };

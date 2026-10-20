@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, CalendarDays, CheckCircle2, MapPin, ShieldAlert, Ticket } from "lucide-react";
 import { getEventById } from "../../services/eventServices";
-import { createBooking, createRazorpayOrder, verifyRazorpayPayment } from "../../services/bookingServices";
+import { createBooking, startBookingPayment } from "../../services/bookingServices";
 import fallbackImage from "../../assets/bg.jpg";
 
 function formatDate(value) {
@@ -13,18 +13,6 @@ function formatDate(value) {
 
 function formatPrice(value) {
   return `₹${Number(value || 0).toLocaleString("en-IN")}`;
-}
-
-function loadRazorpayCheckout() {
-  if (window.Razorpay) return Promise.resolve(true);
-
-  return new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
 }
 
 export function BookingPage() {
@@ -118,51 +106,17 @@ export function BookingPage() {
     setPaymentLoading(true);
     setPaymentMessage("");
     try {
-      const order = await createRazorpayOrder(booking._id);
-      const checkoutLoaded = await loadRazorpayCheckout();
-
-      if (!checkoutLoaded) {
-        setPaymentMessage("Razorpay Checkout could not load. Check your internet connection and try again.");
-        return;
-      }
-
-      const razorpay = new window.Razorpay({
-        key: order.keyId,
-        amount: order.amount,
-        currency: order.currency,
-        name: "Gatherix",
-        description: `Booking for ${event.title}`,
-        order_id: order.orderId,
-        prefill: {
-          name: booking.attendeeName,
-          email: booking.attendeeEmail,
-        },
-        handler: async (response) => {
-          setPaymentLoading(true);
-          setPaymentMessage("");
-          try {
-            const result = await verifyRazorpayPayment(booking._id, {
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpaySignature: response.razorpay_signature,
-            });
-            setBooking(result.booking);
-            setPaymentMessage("Payment was verified by the server. Your booking is confirmed.");
-          } catch (requestError) {
-            setPaymentMessage(requestError.message || "Payment could not be verified. Your booking is still pending and unpaid.");
-          } finally {
-            setPaymentLoading(false);
-          }
-        },
-        modal: {
-          ondismiss: () => setPaymentMessage("Checkout was closed. Your booking is still pending and unpaid."),
-        },
-      });
-
-      razorpay.on("payment.failed", () => {
+      const result = await startBookingPayment(booking, event.title);
+      if (result.status === "verified") {
+        setBooking(result.booking);
+        setPaymentMessage("Payment was verified by the server. Your booking is confirmed.");
+      } else if (result.status === "dismissed") {
+        setPaymentMessage("Checkout was closed. Your booking is still pending and unpaid.");
+      } else if (result.status === "failed") {
         setPaymentMessage("Payment failed. Your booking is still pending and unpaid.");
-      });
-      razorpay.open();
+      } else {
+        setPaymentMessage(result.message || "Payment could not be verified. Your booking is still pending and unpaid.");
+      }
     } catch (requestError) {
       setPaymentMessage(requestError.message || "Could not start Razorpay Checkout. Please try again.");
     } finally {
@@ -193,7 +147,9 @@ export function BookingPage() {
             <CheckCircle2 className="mb-4 text-emerald-600" size={36} />
             <h1 className="mb-2 text-3xl font-extrabold">Booking saved</h1>
             <p className="text-slate-600">Your booking for <strong>{event.title}</strong> was saved by the server.</p>
-            {booking.paymentStatus === "paid" && booking.bookingStatus === "confirmed" ? (
+            {booking.paymentStatus === "not_required" && booking.bookingStatus === "confirmed" ? (
+              <p className="rounded-xl bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">This free booking is <strong>confirmed</strong>. Your ticket is available in My Bookings.</p>
+            ) : booking.paymentStatus === "paid" && booking.bookingStatus === "confirmed" ? (
               <p className="rounded-xl bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">Payment is <strong>paid</strong> and your booking is <strong>confirmed</strong> in Razorpay Test Mode.</p>
             ) : (
               <p className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">This booking is <strong>pending</strong> and <strong>unpaid</strong>. Test Mode is a simulation; no real money is collected.</p>
@@ -201,7 +157,7 @@ export function BookingPage() {
             <p className="text-sm text-slate-600">Booking ID: {booking._id}</p>
             {paymentMessage && <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700" role="status">{paymentMessage}</p>}
             <div className="mt-5 flex flex-wrap gap-3">
-              {booking.paymentStatus !== "paid" && <button className="rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-white hover:bg-brand-primary-dark disabled:opacity-60" disabled={paymentLoading} onClick={handlePayment} type="button">{paymentLoading ? "Preparing payment..." : "Pay with Razorpay Test Mode"}</button>}
+              {booking.paymentStatus === "unpaid" && booking.bookingStatus === "pending" && <button className="rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-white hover:bg-brand-primary-dark disabled:opacity-60" disabled={paymentLoading} onClick={handlePayment} type="button">{paymentLoading ? "Preparing payment..." : "Pay with Razorpay Test Mode"}</button>}
               <Link className="rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-white hover:bg-brand-primary-dark" to="/my-bookings">View my bookings</Link>
               <Link className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50" to={`/events/${id}`}>Back to event</Link>
             </div>

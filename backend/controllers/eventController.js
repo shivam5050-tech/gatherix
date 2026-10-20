@@ -1,4 +1,5 @@
 const Event = require("../modules/Event");
+const Booking = require("../modules/Booking");
 const mongoose = require("mongoose");
 
 const editableEventFields = [
@@ -12,7 +13,6 @@ const editableEventFields = [
     "totalTickets",
     "availableTickets",
     "image",
-    "status",
 ];
 
 function validateEventUpdates(updates) {
@@ -100,7 +100,7 @@ const createEvent = async (req, res) => {
 // Get All Events
 const getAllEvents = async (req, res) => {
     try {
-        const events = await Event.find().populate("organizer", "name email");
+        const events = await Event.find({ status: "published" }).populate("organizer", "name email");
 
         res.status(200).json({
             count: events.length,
@@ -175,6 +175,10 @@ const updateEvent = async (req, res) => {
             return res.status(403).json({ message: "Only the event organizer or an administrator can update this event" });
         }
 
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "status")) {
+            return res.status(403).json({ message: "Event status can only be changed through administrator controls" });
+        }
+
         const body = req.body && typeof req.body === "object" ? req.body : {};
         const updates = Object.fromEntries(
             editableEventFields
@@ -235,6 +239,14 @@ const deleteEvent = async (req, res) => {
 
         if (!isOrganizerOrAdmin(req, event)) {
             return res.status(403).json({ message: "Only the event organizer or an administrator can delete this event" });
+        }
+
+        if (event.status === "published") {
+            return res.status(409).json({ message: "Unpublish the event before deleting it." });
+        }
+
+        if (await Booking.exists({ event: event._id })) {
+            return res.status(409).json({ message: "This event has booking history and cannot be deleted. Unpublish or cancel it instead." });
         }
 
         await event.deleteOne();

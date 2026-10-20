@@ -45,8 +45,14 @@ const bookingSchema = new mongoose.Schema(
         },
         paymentStatus: {
             type: String,
-            enum: ["unpaid", "paid"],
+            enum: ["unpaid", "paid", "not_required"],
             default: "unpaid",
+        },
+        ticketToken: {
+            type: String,
+            unique: true,
+            sparse: true,
+            select: false,
         },
         razorpayOrderId: {
             type: String,

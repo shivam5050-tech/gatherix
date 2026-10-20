@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon --exec \"node --use-system-ca\" server.js",
     "start": "node --use-system-ca server.js",
-    "email:check": "node scripts/checkEmail.js",
+    "admin:promote": "node scripts/promoteAdmin.js",
+    "email:check": "node --use-system-ca scripts/checkEmail.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

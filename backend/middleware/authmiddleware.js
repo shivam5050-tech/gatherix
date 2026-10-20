@@ -29,6 +29,11 @@ async function authMiddleware(req, res, next) {
             });
         }
 
+        // Missing status is treated as active for accounts created before this field existed.
+        if (user.status && user.status !== "active") {
+            return res.status(403).json({ message: "This account is suspended" });
+        }
+
         req.user = user;
 
         next();

@@ -1,4 +1,6 @@
 const nodemailer = require("nodemailer");
+const dns = require("node:dns").promises;
+const net = require("node:net");
 
 function getEmailEnvironmentStatus() {
     return Object.fromEntries([
@@ -46,15 +48,28 @@ function getEmailConfiguration() {
             host: EMAIL_HOST,
             port,
             secure,
+            connectionTimeout: 15000,
+            greetingTimeout: 15000,
+            socketTimeout: 30000,
             auth: { user: EMAIL_USER, pass: EMAIL_PASS },
         },
     };
 }
 
-function createTransporter() {
+async function createTransporter() {
     const configuration = getEmailConfiguration();
     if (configuration.error) throw new Error(configuration.error);
-    return nodemailer.createTransport(configuration.transport);
+
+    const transport = { ...configuration.transport };
+    if (!net.isIP(transport.host)) {
+        const addresses = await dns.lookup(transport.host, { all: true, verbatim: true });
+        const address = addresses.find((entry) => entry.family === 4) || addresses[0];
+        if (!address) throw new Error(`No IP address found for SMTP host ${transport.host}`);
+        transport.host = address.address;
+        transport.tls = { ...transport.tls, servername: configuration.transport.host };
+    }
+
+    return nodemailer.createTransport(transport);
 }
 
 async function verifyEmailConfiguration() {
@@ -64,8 +79,9 @@ async function verifyEmailConfiguration() {
         return false;
     }
 
-    const transporter = nodemailer.createTransport(configuration.transport);
+    let transporter;
     try {
+        transporter = await createTransporter();
         await transporter.verify();
         console.info("SMTP verification succeeded", { stage: "connect_and_authenticate" });
         return true;
@@ -74,10 +90,14 @@ async function verifyEmailConfiguration() {
             stage: error.code === "EAUTH" ? "authentication" : "connection_or_greeting",
             code: error.code || "SMTP_VERIFY_FAILED",
             responseCode: error.responseCode,
+            message: error.message,
+            syscall: error.syscall,
+            hostname: error.hostname,
+            address: error.address,
         });
         return false;
     } finally {
-        transporter.close();
+        transporter?.close();
     }
 }
 
@@ -93,7 +113,7 @@ function escapeHtml(value) {
 async function sendWelcomeEmail(email, name) {
     let transporter;
     try {
-        transporter = createTransporter();
+        transporter = await createTransporter();
     } catch (error) {
         console.error("Welcome email configuration failed", {
             stage: "configuration",
@@ -118,6 +138,10 @@ async function sendWelcomeEmail(email, name) {
             stage: error.code === "EAUTH" ? "authentication" : "send_mail",
             code: error.code || "EMAIL_SEND_FAILED",
             responseCode: error.responseCode,
+            message: error.message,
+            syscall: error.syscall,
+            hostname: error.hostname,
+            address: error.address,
         });
         throw error;
     } finally {
