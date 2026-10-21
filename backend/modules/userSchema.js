@@ -34,6 +34,16 @@ const userSchema = new mongoose.Schema(
             enum: ["active", "suspended"],
             default: "active",
         },
+        passwordReset: {
+            otpHash: { type: String, default: null },
+            otpExpiresAt: { type: Date, default: null },
+            otpAttempts: { type: Number, default: 0 },
+            otpRequestedAt: { type: Date, default: null },
+            otpWindowStartedAt: { type: Date, default: null },
+            otpRequestCount: { type: Number, default: 0 },
+            tokenHash: { type: String, default: null },
+            tokenExpiresAt: { type: Date, default: null },
+        },
     },
     {
         timestamps: true,

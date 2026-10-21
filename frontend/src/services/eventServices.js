@@ -33,6 +33,30 @@ export const createEvent = async (eventData) => {
     return data.event;
 };
 
+export const uploadEventImage = async (file) => {
+    const response = await authenticatedFetch("/events/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const error = new Error(data.message || "Could not upload the image.");
+        error.status = response.status;
+        throw error;
+    }
+    return data;
+};
+
+export const cleanupEventImage = async (image) => {
+    if (!image?.publicId || !image?.cleanupToken) return;
+    await authenticatedEventRequest("/events/images", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publicId: image.publicId, cleanupToken: image.cleanupToken }),
+    });
+};
+
 async function authenticatedEventRequest(path, options = {}) {
     const response = await authenticatedFetch(path, options);
     const data = await response.json();

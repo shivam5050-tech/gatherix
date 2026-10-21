@@ -97,6 +97,7 @@ export function Login() {
                                 {!formik.isSubmitting && <ArrowRight aria-hidden="true" size={17} />}
                             </button>
                         </form>
+                        <p className="mb-0 mt-4 text-right text-sm"><Link className="font-bold text-brand-primary hover:text-brand-primary-dark" to="/forgot-password">Forgot Password?</Link></p>
                         <p className="mb-0 mt-6 text-center text-sm text-slate-600">Don’t have an account? <Link className="font-extrabold text-brand-primary hover:text-brand-primary-dark" to="/signup">Sign up</Link></p>
                     </div>
                 </section>

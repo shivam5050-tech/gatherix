@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
-import { deleteEvent, getMyEvents, updateEvent } from "../../services/eventServices";
+import { cleanupEventImage, deleteEvent, getMyEvents, updateEvent, uploadEventImage } from "../../services/eventServices";
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 function formatPrice(value) {
   const price = Number(value);
@@ -30,6 +33,7 @@ function makeEditForm(event) {
     price: String(event.price ?? ""),
     totalTickets: String(event.totalTickets ?? ""),
     availableTickets: String(event.availableTickets ?? ""),
+    image: event.image || "",
   };
 }
 
@@ -43,6 +47,9 @@ export function OrganizerDashboard() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [savingId, setSavingId] = useState("");
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImagePreview, setEditImagePreview] = useState("");
+  const [editImageError, setEditImageError] = useState("");
 
   async function loadMyEvents() {
     if (!isLoggedIn) return;
@@ -68,6 +75,9 @@ export function OrganizerDashboard() {
   function startEditing(event) {
     setEditingEvent(event);
     setEditForm(makeEditForm(event));
+    setEditImageFile(null);
+    setEditImagePreview("");
+    setEditImageError("");
     setError("");
     setErrorStatus(null);
     setSuccess("");
@@ -75,7 +85,35 @@ export function OrganizerDashboard() {
 
   function updateEditField(changeEvent) {
     const { name, value } = changeEvent.target;
+    if (name === "image" && editImagePreview) {
+      URL.revokeObjectURL(editImagePreview);
+      setEditImagePreview("");
+      setEditImageFile(null);
+    }
     setEditForm({ ...editForm, [name]: value });
+  }
+
+  function selectEditImage(changeEvent) {
+    const file = changeEvent.target.files?.[0];
+    if (!file) return;
+    if (!IMAGE_TYPES.includes(file.type) || file.size > MAX_IMAGE_SIZE) {
+      setEditImageError(file.size > MAX_IMAGE_SIZE ? "Choose an image that is 5 MB or smaller." : "Choose a JPEG, PNG, or WebP image.");
+      changeEvent.target.value = "";
+      return;
+    }
+    if (editImagePreview) URL.revokeObjectURL(editImagePreview);
+    setEditImageError("");
+    setEditImageFile(file);
+    setEditImagePreview(URL.createObjectURL(file));
+    setEditForm((current) => ({ ...current, image: "" }));
+  }
+
+  function removeEditImage() {
+    if (editImagePreview) URL.revokeObjectURL(editImagePreview);
+    setEditImagePreview("");
+    setEditImageFile(null);
+    setEditForm((current) => ({ ...current, image: "" }));
+    setEditImageError("");
   }
 
   async function saveEvent(submitEvent) {
@@ -105,7 +143,13 @@ export function OrganizerDashboard() {
     setError("");
     setErrorStatus(null);
     setSuccess("");
+    let uploadedImage = null;
     try {
+      let image = editForm.image.trim();
+      if (editImageFile) {
+        uploadedImage = await uploadEventImage(editImageFile);
+        image = uploadedImage.url;
+      }
       const updatedEvent = await updateEvent(editingEvent._id, {
         title: editForm.title.trim(),
         date: new Date(editForm.date).toISOString(),
@@ -113,12 +157,16 @@ export function OrganizerDashboard() {
         price,
         totalTickets,
         availableTickets,
+        image,
       });
       setEvents(events.map((event) => (event._id === updatedEvent._id ? updatedEvent : event)));
       setEditingEvent(null);
       setEditForm(null);
       setSuccess(`“${updatedEvent.title}” was updated successfully.`);
     } catch (requestError) {
+      if (uploadedImage && requestError.status) {
+        try { await cleanupEventImage(uploadedImage); } catch { /* The event request error remains the useful message. */ }
+      }
       setError(requestError.message || "Could not update the event. Please try again.");
       setErrorStatus(requestError.status || null);
     } finally {
@@ -219,6 +267,17 @@ export function OrganizerDashboard() {
                             <label className="block text-sm font-semibold text-slate-700">Available tickets
                               <input className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal" min="0" name="availableTickets" onChange={updateEditField} required step="1" type="number" value={editForm.availableTickets} />
                             </label>
+                          </div>
+                          <div className="space-y-3">
+                            <label className="block text-sm font-semibold text-slate-700">Upload a replacement image <span className="font-normal text-slate-500">(JPEG, PNG, or WebP; up to 5 MB)</span>
+                              <input accept="image/jpeg,image/png,image/webp" className="mt-1.5 block w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-normal file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:font-bold file:text-brand-primary" onChange={selectEditImage} type="file" />
+                            </label>
+                            {editImageError && <p className="mb-0 text-sm text-rose-700" role="alert">{editImageError}</p>}
+                            <label className="block text-sm font-semibold text-slate-700">Or edit the image URL
+                              <input className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal" name="image" onChange={updateEditField} type="url" value={editForm.image} />
+                            </label>
+                            {(editImagePreview || editForm.image) && <img alt="Event image preview" className="h-40 w-full rounded-xl bg-violet-100 object-cover" src={editImagePreview || editForm.image} />}
+                            {(editImageFile || editForm.image) && <button className="text-sm font-bold text-rose-700 underline" onClick={removeEditImage} type="button">Remove event image</button>}
                           </div>
                           <div className="flex flex-wrap gap-3">
                             <button className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-primary-dark disabled:opacity-60" disabled={savingId === event._id} type="submit">{savingId === event._id ? "Saving..." : "Save changes"}</button>

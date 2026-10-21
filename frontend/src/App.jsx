@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Home } from "./pages/Home/Home";
 import { Footer } from "./components/layout/Footer";
 import { Login } from "./pages/Login/Login";
+import { ForgotPassword } from "./pages/Login/ForgotPassword";
 import { Signup } from "./pages/Login/Signup";
 import { EventDetails } from "./pages/Events/EventDetails";
 import { ExploreEvents } from "./pages/Events/ExploreEvents";
@@ -32,6 +33,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/my-bookings" element={<MyBookings />} />

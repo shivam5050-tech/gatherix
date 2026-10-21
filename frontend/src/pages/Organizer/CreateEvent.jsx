@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarDays, MapPin, Ticket } from "lucide-react";
-import { createEvent } from "../../services/eventServices";
+import { cleanupEventImage, createEvent, uploadEventImage } from "../../services/eventServices";
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const emptyEvent = {
   title: "",
@@ -27,14 +30,44 @@ export function CreateEvent() {
   const [errorStatus, setErrorStatus] = useState(null);
   const [createdEvent, setCreatedEvent] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageError, setImageError] = useState("");
   const isLoggedIn = Boolean(localStorage.getItem("token"));
 
   function updateField(changeEvent) {
     const { name, value } = changeEvent.target;
+    if (name === "image" && selectedImage) {
+      URL.revokeObjectURL(imagePreview);
+      setSelectedImage(null);
+      setImagePreview("");
+    }
     setEventForm({ ...eventForm, [name]: value });
     setError("");
     setErrorStatus(null);
     setCreatedEvent(null);
+  }
+
+  function selectImage(changeEvent) {
+    const file = changeEvent.target.files?.[0];
+    if (!file) return;
+    if (!IMAGE_TYPES.includes(file.type) || file.size > MAX_IMAGE_SIZE) {
+      setImageError(file.size > MAX_IMAGE_SIZE ? "Choose an image that is 5 MB or smaller." : "Choose a JPEG, PNG, or WebP image.");
+      changeEvent.target.value = "";
+      return;
+    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageError("");
+    setSelectedImage(file);
+    setImagePreview(URL.createObjectURL(file));
+    setEventForm((current) => ({ ...current, image: "" }));
+  }
+
+  function removeSelectedImage() {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview("");
+    setSelectedImage(null);
+    setImageError("");
   }
 
   async function handleSubmit(submitEvent) {
@@ -69,10 +102,19 @@ export function CreateEvent() {
     };
 
     setSaving(true);
+    let uploadedImage = null;
     try {
+      if (selectedImage) {
+        uploadedImage = await uploadEventImage(selectedImage);
+        eventData.image = uploadedImage.url;
+      }
       const savedEvent = await createEvent(eventData);
       setCreatedEvent(savedEvent);
+      removeSelectedImage();
     } catch (requestError) {
+      if (uploadedImage && requestError.status) {
+        try { await cleanupEventImage(uploadedImage); } catch { /* The event request error remains the useful message. */ }
+      }
       setError(requestError.message || "Could not create the event. Please try again.");
       setErrorStatus(requestError.status || null);
     } finally {
@@ -164,17 +206,23 @@ export function CreateEvent() {
               </label>
             </div>
 
-            <label className="block text-sm font-semibold text-slate-700">
-              Image URL <span className="font-normal text-slate-500">(optional)</span>
-              <input className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 font-normal outline-none focus:border-brand-primary" name="image" onChange={updateField} type="url" value={eventForm.image} />
-            </label>
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-slate-700">Upload an image <span className="font-normal text-slate-500">(JPEG, PNG, or WebP; up to 5 MB)</span>
+                <input accept="image/jpeg,image/png,image/webp" className="mt-2 block w-full rounded-xl border border-slate-300 px-3.5 py-3 text-sm font-normal file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:font-bold file:text-brand-primary" onChange={selectImage} type="file" />
+              </label>
+              {imageError && <p className="mb-0 text-sm text-rose-700" role="alert">{imageError}</p>}
+              <label className="block text-sm font-semibold text-slate-700">Or use an image URL <span className="font-normal text-slate-500">(a selected file takes precedence)</span>
+                <input className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 font-normal outline-none focus:border-brand-primary" name="image" onChange={updateField} type="url" value={eventForm.image} />
+              </label>
+              {selectedImage && <button className="text-sm font-bold text-rose-700 underline" onClick={removeSelectedImage} type="button">Remove selected image</button>}
+            </div>
 
             <button className="w-full rounded-xl bg-brand-primary px-5 py-3.5 text-sm font-extrabold text-white hover:bg-brand-primary-dark disabled:cursor-wait disabled:opacity-60 sm:w-auto" disabled={saving} type="submit">{saving ? "Creating event..." : "Create event"}</button>
           </form>
 
           <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-24">
-            {eventForm.image ? (
-              <img alt="Event preview" className="h-48 w-full bg-violet-100 object-cover" onError={(imageEvent) => { imageEvent.currentTarget.style.display = "none"; }} src={eventForm.image} />
+            {(imagePreview || eventForm.image) ? (
+              <img alt="Event preview" className="h-48 w-full bg-violet-100 object-cover" onError={(imageEvent) => { imageEvent.currentTarget.style.display = "none"; }} src={imagePreview || eventForm.image} />
             ) : (
               <div className="grid h-36 place-items-center bg-gradient-to-br from-violet-100 to-indigo-100 text-sm font-semibold text-brand-primary">Event image preview</div>
             )}

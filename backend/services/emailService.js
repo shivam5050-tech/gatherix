@@ -158,4 +158,20 @@ async function sendWelcomeEmail(email, name) {
     return Boolean(info.messageId && info.accepted?.length);
 }
 
-module.exports = { sendWelcomeEmail, verifyEmailConfiguration, getEmailEnvironmentStatus };
+async function sendPasswordResetOtp(email, otp) {
+    const transporter = await createTransporter();
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.EMAIL_FROM,
+            to: email,
+            subject: "Your Gatherix password reset code",
+            text: `Your Gatherix verification code is ${otp}. It expires in 10 minutes. If you did not request a password reset, you can ignore this email.`,
+            html: `<p>Your Gatherix verification code is <strong>${otp}</strong>.</p><p>It expires in 10 minutes. If you did not request a password reset, you can ignore this email.</p>`,
+        });
+        return Boolean(info.messageId && info.accepted?.length);
+    } finally {
+        transporter.close();
+    }
+}
+
+module.exports = { sendWelcomeEmail, sendPasswordResetOtp, verifyEmailConfiguration, getEmailEnvironmentStatus };
