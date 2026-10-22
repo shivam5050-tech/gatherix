@@ -3,11 +3,69 @@ const crypto = require("crypto");
 const https = require("https");
 const Booking = require("../modules/Booking");
 const Event = require("../modules/Event");
+const { sendBookingConfirmationEmail } = require("../services/emailService");
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function createTicketToken() {
     return crypto.randomBytes(32).toString("base64url");
+}
+
+async function sendBookingConfirmationOnce(bookingId) {
+    const claimId = crypto.randomUUID();
+    let claimed;
+    try {
+        claimed = await Booking.findOneAndUpdate(
+            {
+                _id: bookingId,
+                bookingStatus: "confirmed",
+                $and: [
+                    { $or: [{ paymentStatus: "paid", paymentVerifiedAt: { $type: "date" } }, { paymentStatus: "not_required", subtotal: 0 }] },
+                    { $or: [{ confirmationEmailStatus: { $in: ["pending", "failed"] } }, { confirmationEmailStatus: { $exists: false } }] },
+                ],
+            },
+            { $set: { confirmationEmailStatus: "sending", confirmationEmailClaimId: claimId, confirmationEmailLastAttemptAt: new Date(), confirmationEmailLastError: null }, $inc: { confirmationEmailAttempts: 1 } },
+            { new: true }
+        ).populate("event", "title date location city").lean();
+    } catch (error) {
+        console.error("Booking email claim failed", { code: error.code || "DATABASE_ERROR" });
+        return "pending";
+    }
+
+    if (!claimed) {
+        const current = await Booking.findById(bookingId).select("confirmationEmailStatus").lean().catch(() => null);
+        return current?.confirmationEmailStatus || "pending";
+    }
+
+    try {
+        const accepted = await sendBookingConfirmationEmail(claimed);
+        if (!accepted) {
+            const error = new Error("Mail provider did not accept the message");
+            error.code = "EMAIL_NOT_ACCEPTED";
+            throw error;
+        }
+    } catch (error) {
+        const errorCode = String(error.code || "EMAIL_SEND_FAILED").slice(0, 80);
+        await Booking.updateOne(
+            { _id: bookingId, confirmationEmailStatus: "sending", confirmationEmailClaimId: claimId },
+            { $set: { confirmationEmailStatus: "failed", confirmationEmailLastError: errorCode }, $unset: { confirmationEmailClaimId: 1 } }
+        ).catch((databaseError) => console.error("Booking email failure status could not be saved", { code: databaseError.code || "DATABASE_ERROR" }));
+        console.warn("Booking confirmation email failed", { code: errorCode });
+        return "failed";
+    }
+
+    try {
+        const markedSent = await Booking.updateOne(
+            { _id: bookingId, confirmationEmailStatus: "sending", confirmationEmailClaimId: claimId },
+            { $set: { confirmationEmailStatus: "sent", confirmationEmailSentAt: new Date(), confirmationEmailLastError: null }, $unset: { confirmationEmailClaimId: 1 } }
+        );
+        if (markedSent.modifiedCount) return "sent";
+        console.error("Booking email was accepted but sent status was not recorded", { code: "EMAIL_STATUS_NOT_RECORDED" });
+        return "sending";
+    } catch (error) {
+        console.error("Booking email was accepted but sent status update failed", { code: error.code || "DATABASE_ERROR" });
+        return "sending";
+    }
 }
 
 function withoutTicketToken(booking) {
@@ -226,10 +284,12 @@ const createBooking = async (req, res) => {
             paymentStatus: isFreeEvent ? "not_required" : "unpaid",
             ...(isFreeEvent ? { ticketToken: createTicketToken() } : {}),
         });
+        const confirmationEmailStatus = isFreeEvent ? await sendBookingConfirmationOnce(booking._id) : "pending";
 
         return res.status(201).json({
             message: isFreeEvent ? "Free booking confirmed. Ticket issued." : "Booking created. Payment is still pending.",
             booking: withoutTicketToken(booking),
+            confirmationEmailStatus,
             event,
         });
     } catch (error) {
@@ -248,7 +308,7 @@ const createBooking = async (req, res) => {
 const getMyBookings = async (req, res) => {
     try {
         const bookings = await Booking.find({ user: req.user._id })
-            .select("_id event ticketQuantity subtotal bookingStatus paymentStatus paymentVerifiedAt createdAt +ticketToken")
+            .select("_id event ticketQuantity subtotal bookingStatus paymentStatus paymentVerifiedAt createdAt confirmationEmailStatus confirmationEmailAttempts +ticketToken")
             .populate("event", "title date location city image status totalTickets availableTickets")
             .sort({ createdAt: -1 })
             .lean();
@@ -595,7 +655,8 @@ const verifyPayment = async (req, res) => {
                         { new: true }
                     ).select("+ticketToken") || await Booking.findById(booking._id).select("+ticketToken");
                 }
-                return res.status(200).json({ booking: withoutTicketToken(booking), alreadyVerified: true });
+                const confirmationEmailStatus = await sendBookingConfirmationOnce(booking._id);
+                return res.status(200).json({ booking: withoutTicketToken(booking), alreadyVerified: true, confirmationEmailStatus });
             }
 
             return res.status(409).json({ message: "This booking has already been verified with another payment" });
@@ -649,15 +710,37 @@ const verifyPayment = async (req, res) => {
         if (!updatedBooking) {
             const currentBooking = await Booking.findOne({ _id: booking._id, user: req.user._id });
             if (currentBooking?.paymentStatus === "paid" && currentBooking.razorpayPaymentId === razorpayPaymentId) {
-                return res.status(200).json({ booking: withoutTicketToken(currentBooking), alreadyVerified: true });
+                const confirmationEmailStatus = await sendBookingConfirmationOnce(currentBooking._id);
+                return res.status(200).json({ booking: withoutTicketToken(currentBooking), alreadyVerified: true, confirmationEmailStatus });
             }
 
             return res.status(409).json({ message: "Booking payment state changed. Please refresh and try again." });
         }
 
-        return res.status(200).json({ booking: withoutTicketToken(updatedBooking), alreadyVerified: false });
+        const confirmationEmailStatus = await sendBookingConfirmationOnce(updatedBooking._id);
+        return res.status(200).json({ booking: withoutTicketToken(updatedBooking), alreadyVerified: false, confirmationEmailStatus });
     } catch (error) {
         return respondToRazorpayError(error, res, "payment verification");
+    }
+};
+
+const retryBookingConfirmationEmail = async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: "Booking not found." });
+    try {
+        const booking = await Booking.findOne({ _id: req.params.id, user: req.user._id })
+            .select("bookingStatus paymentStatus paymentVerifiedAt subtotal").lean();
+        if (!booking) return res.status(404).json({ message: "Booking not found." });
+        const isPaidConfirmed = booking.bookingStatus === "confirmed" && booking.paymentStatus === "paid" && booking.paymentVerifiedAt instanceof Date;
+        const isFreeConfirmed = booking.bookingStatus === "confirmed" && booking.paymentStatus === "not_required" && booking.subtotal === 0;
+        if (!isPaidConfirmed && !isFreeConfirmed) return res.status(409).json({ message: "Confirmation email is available only for a confirmed booking." });
+        const emailStatus = await sendBookingConfirmationOnce(req.params.id);
+        return res.status(200).json({
+            emailStatus,
+            message: emailStatus === "sent" ? "Booking confirmation email sent." : emailStatus === "sending" ? "Booking confirmation email is already being processed." : emailStatus === "failed" ? "Email delivery failed. You can retry in a moment." : "Could not start the email attempt. Please retry.",
+        });
+    } catch (error) {
+        console.error("Booking email retry failed", { code: error.code || "BOOKING_EMAIL_RETRY_FAILED" });
+        return res.status(500).json({ message: "Could not retry the confirmation email. The booking remains confirmed." });
     }
 };
 
@@ -706,4 +789,5 @@ module.exports = {
     createPaymentOrder,
     verifyPayment,
     verifyTicket,
+    retryBookingConfirmationEmail,
 };

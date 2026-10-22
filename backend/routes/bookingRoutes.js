@@ -8,12 +8,14 @@ const {
     createPaymentOrder,
     verifyPayment,
     verifyTicket,
+    retryBookingConfirmationEmail,
 } = require("../controllers/bookingController");
 
 const router = express.Router();
 
 // Public verification uses an unguessable capability token in the request body.
 router.post("/tickets/verify", verifyTicket);
+router.post("/:id/confirmation-email/retry", authMiddleware, retryBookingConfirmationEmail);
 router.post("/", authMiddleware, createBooking);
 router.get("/mine", authMiddleware, getMyBookings);
 router.get("/events/:eventId", authMiddleware, getEventBookings);

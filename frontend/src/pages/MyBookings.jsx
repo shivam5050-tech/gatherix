@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { CalendarDays, MapPin, Ticket } from "lucide-react";
-import { cancelBooking, getMyBookings, startBookingPayment } from "../services/bookingServices";
+import { cancelBooking, getMyBookings, retryBookingConfirmationEmail, startBookingPayment } from "../services/bookingServices";
 
 function formatDate(value) {
   const date = new Date(value);
@@ -22,6 +22,8 @@ export function MyBookings() {
   const [cancellationMessage, setCancellationMessage] = useState("");
   const [cancellationError, setCancellationError] = useState("");
   const [cancellingId, setCancellingId] = useState(null);
+  const [retryingEmailId, setRetryingEmailId] = useState(null);
+  const [emailRetryMessage, setEmailRetryMessage] = useState("");
   const [payingId, setPayingId] = useState(null);
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentError, setPaymentError] = useState("");
@@ -90,6 +92,20 @@ export function MyBookings() {
     }
   }
 
+  async function handleRetryConfirmationEmail(booking) {
+    setRetryingEmailId(booking._id);
+    setEmailRetryMessage("");
+    try {
+      const result = await retryBookingConfirmationEmail(booking._id);
+      setEmailRetryMessage(result.message || "Email attempt complete.");
+      await loadBookings();
+    } catch (requestError) {
+      setEmailRetryMessage(requestError.message || "Could not retry the email. Your booking remains confirmed.");
+    } finally {
+      setRetryingEmailId(null);
+    }
+  }
+
   useEffect(() => {
     loadBookings();
   }, []);
@@ -116,6 +132,7 @@ export function MyBookings() {
             {cancellationError && <p className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">{cancellationError}</p>}
             {paymentMessage && <p className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">{paymentMessage}</p>}
             {paymentError && <p className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">{paymentError}</p>}
+            {emailRetryMessage && <p className="mb-5 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700" role="status">{emailRetryMessage}</p>}
             <div className="mb-5 flex items-center justify-between gap-4">
               <p className="mb-0 text-sm text-slate-600">These are booking records created by your account.</p>
               <button className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60" disabled={loading} onClick={loadBookings} type="button">Refresh</button>
@@ -151,6 +168,9 @@ export function MyBookings() {
                         <p className="mb-1 font-semibold">{booking.ticketQuantity} ticket{booking.ticketQuantity === 1 ? "" : "s"} · {formatPrice(booking.subtotal)}</p>
                         <p className={`mb-0 text-xs ${isPaidAndConfirmed || isFreeAndConfirmed ? "text-emerald-800" : isCancelled ? "text-slate-600" : "text-amber-800"}`}>{isPaidAndConfirmed ? "Payment verified in Razorpay Test Mode. Booking confirmed." : isFreeAndConfirmed ? "Free booking confirmed by Gatherix." : isCancelled ? "Booking cancelled. This flow does not issue refunds." : isCancellationInProgress ? "Cancellation is in progress. Retry if it does not finish." : "Payment is pending. This booking remains unpaid until Razorpay verifies it."}</p>
                       </div>
+                      {booking.confirmationEmailStatus === "failed" && <button className="mt-3 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60" disabled={Boolean(retryingEmailId)} onClick={() => handleRetryConfirmationEmail(booking)} type="button">{retryingEmailId === booking._id ? "Retrying email…" : "Retry confirmation email"}</button>}
+                      {booking.confirmationEmailStatus === "sent" && <p className="mb-0 mt-3 text-xs text-emerald-700">Confirmation email sent.</p>}
+                      {booking.confirmationEmailStatus === "sending" && <p className="mb-0 mt-3 text-xs text-slate-500">Confirmation email is being processed.</p>}
                       {canViewTicket && <button className="mt-4 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-primary-dark" onClick={() => setTicketBooking(booking)} type="button">View Ticket / Show QR Code</button>}
                       {booking.paymentEligible === true && booking.bookingStatus === "pending" && booking.paymentStatus === "unpaid" && <button className="mt-4 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-primary-dark disabled:cursor-not-allowed disabled:opacity-60" disabled={Boolean(payingId || cancellingId) || loading} onClick={() => handleCompletePayment(booking)} type="button">{payingId === booking._id ? "Opening payment..." : "Complete Payment"}</button>}
                       {!canViewTicket && booking.bookingStatus === "confirmed" && <p className="mb-0 mt-4 text-xs text-slate-500">This confirmed booking does not have a digital ticket.</p>}

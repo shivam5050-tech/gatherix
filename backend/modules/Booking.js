@@ -75,6 +75,31 @@ const bookingSchema = new mongoose.Schema(
         paymentVerifiedAt: {
             type: Date,
         },
+        confirmationEmailStatus: {
+            type: String,
+            enum: ["pending", "sending", "sent", "failed"],
+            default: "pending",
+        },
+        confirmationEmailClaimId: {
+            type: String,
+            default: null,
+        },
+        confirmationEmailAttempts: {
+            type: Number,
+            default: 0,
+        },
+        confirmationEmailLastAttemptAt: {
+            type: Date,
+            default: null,
+        },
+        confirmationEmailSentAt: {
+            type: Date,
+            default: null,
+        },
+        confirmationEmailLastError: {
+            type: String,
+            default: null,
+        },
     },
     {
         timestamps: true,

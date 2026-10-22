@@ -174,4 +174,39 @@ async function sendPasswordResetOtp(email, otp) {
     }
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetOtp, verifyEmailConfiguration, getEmailEnvironmentStatus };
+async function sendBookingConfirmationEmail(booking) {
+    const event = booking.event || {};
+    const baseUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+    const bookingsUrl = `${baseUrl}/my-bookings`;
+    const attendeeName = booking.attendeeName || "there";
+    const eventTitle = event.title || "Your Gatherix event";
+    const eventDate = event.date ? new Date(event.date).toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }) : "To be announced";
+    const venue = [event.location, event.city].filter(Boolean).join(", ") || "To be announced";
+    const quantity = booking.ticketQuantity;
+    const amount = booking.paymentStatus === "not_required"
+        ? "Free booking"
+        : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(booking.subtotal) || 0);
+    const safeName = escapeHtml(attendeeName);
+    const safeTitle = escapeHtml(eventTitle);
+    const safeDate = escapeHtml(eventDate);
+    const safeVenue = escapeHtml(venue);
+    const safeAmount = escapeHtml(amount);
+    const safeReference = escapeHtml(booking._id.toString());
+    const safeUrl = escapeHtml(bookingsUrl);
+
+    const transporter = await createTransporter();
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.EMAIL_FROM,
+            to: booking.attendeeEmail,
+            subject: `Booking confirmed: ${eventTitle.replace(/[\r\n]/g, " ").slice(0, 120)}`,
+            text: `Hi ${attendeeName},\n\nYour booking for ${eventTitle} is confirmed.\n\nDate and time: ${eventDate}\nVenue: ${venue}\nBooking reference: ${booking._id}\nTickets: ${quantity}\nAmount: ${amount}\n\nView your booking and ticket: ${bookingsUrl}\n\nThe Gatherix team`,
+            html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;background:#f7f6ff;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #e7e5f5;border-radius:16px"><tr><td style="padding:28px 24px"><div style="font-size:21px;font-weight:700;color:#4f46e5">Gatherix</div><p style="margin:24px 0 6px;color:#64748b;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Booking confirmed</p><h1 style="margin:0 0 16px;font-size:25px;line-height:1.3">You’re going, ${safeName}!</h1><p style="margin:0 0 22px;color:#475569;font-size:15px;line-height:1.6">Your booking for <strong>${safeTitle}</strong> is confirmed. Here are the details for your visit.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#faf9ff;border-radius:12px"><tr><td style="padding:16px 18px"><p style="margin:0 0 12px;color:#64748b;font-size:12px">DATE AND TIME</p><p style="margin:-8px 0 16px;font-size:15px;font-weight:700">${safeDate}</p><p style="margin:0 0 12px;color:#64748b;font-size:12px">VENUE</p><p style="margin:-8px 0 16px;font-size:15px;font-weight:700">${safeVenue}</p><p style="margin:0 0 12px;color:#64748b;font-size:12px">BOOKING REFERENCE</p><p style="margin:-8px 0 16px;font-size:13px;font-family:monospace;word-break:break-all">${safeReference}</p><p style="margin:0 0 12px;color:#64748b;font-size:12px">TICKETS · AMOUNT</p><p style="margin:-8px 0 0;font-size:15px;font-weight:700">${quantity} · ${safeAmount}</p></td></tr></table><p style="margin:24px 0;text-align:center"><a href="${safeUrl}" style="display:inline-block;padding:13px 20px;border-radius:10px;background:#4f46e5;color:#fff;font-size:14px;font-weight:700;text-decoration:none">View my booking</a></p><p style="margin:0;color:#64748b;font-size:12px;line-height:1.6">Your ticket QR is available in My Bookings. Keep your booking reference handy, and enjoy the event!</p></td></tr></table></td></tr></table></body></html>`,
+        });
+        return Boolean(info.messageId && info.accepted?.length);
+    } finally {
+        transporter.close();
+    }
+}
+
+module.exports = { sendWelcomeEmail, sendPasswordResetOtp, sendBookingConfirmationEmail, verifyEmailConfiguration, getEmailEnvironmentStatus };

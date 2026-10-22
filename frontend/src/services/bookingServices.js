@@ -54,6 +54,10 @@ export async function verifyRazorpayPayment(bookingId, paymentData) {
   });
 }
 
+export async function retryBookingConfirmationEmail(bookingId) {
+  return authenticatedBookingRequest(`/bookings/${bookingId}/confirmation-email/retry`, { method: "POST" });
+}
+
 export async function verifyTicketToken(token) {
   return authenticatedBookingRequest("/bookings/tickets/verify", {
     method: "POST",
