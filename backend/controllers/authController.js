@@ -87,7 +87,7 @@ async function resetPassword(req, res, next) {
         const user = await Users.findOneAndUpdate(
             { email: normalizedEmail, "passwordReset.tokenHash": tokenHash, "passwordReset.tokenExpiresAt": { $gt: new Date() } },
             { $set: { "passwordReset.tokenHash": null, "passwordReset.tokenExpiresAt": null, "passwordReset.otpHash": null, "passwordReset.otpExpiresAt": null } },
-            { new: true }
+            { returnDocument: "after" }
         ).select("+password");
         if (!user) return res.status(400).json({ message: "This reset session is invalid or expired. Request a new code." });
         user.password = password;

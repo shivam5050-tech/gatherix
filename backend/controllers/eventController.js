@@ -206,7 +206,7 @@ const updateEvent = async (req, res) => {
         const updatedEvent = await Event.findByIdAndUpdate(
             event._id,
             { $set: updates },
-            { new: true, runValidators: true }
+            { returnDocument: "after", runValidators: true }
         );
 
         res.status(200).json({

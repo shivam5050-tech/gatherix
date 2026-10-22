@@ -1,6 +1,19 @@
 const nodemailer = require("nodemailer");
-const dns = require("node:dns").promises;
-const net = require("node:net");
+
+function getSafeEmailErrorDetails(error) {
+    const message = String(error.message || "Email operation failed")
+        .replaceAll(process.env.EMAIL_PASS || "\0", "[redacted]")
+        .replaceAll(process.env.EMAIL_USER || "\0", "[redacted]");
+    return {
+        code: error.code || "EMAIL_OPERATION_FAILED",
+        command: error.command,
+        syscall: error.syscall,
+        address: error.address,
+        hostname: error.hostname,
+        responseCode: error.responseCode,
+        message,
+    };
+}
 
 function getEmailEnvironmentStatus() {
     return Object.fromEntries([
@@ -60,16 +73,7 @@ async function createTransporter() {
     const configuration = getEmailConfiguration();
     if (configuration.error) throw new Error(configuration.error);
 
-    const transport = { ...configuration.transport };
-    if (!net.isIP(transport.host)) {
-        const addresses = await dns.lookup(transport.host, { all: true, verbatim: true });
-        const address = addresses.find((entry) => entry.family === 4) || addresses[0];
-        if (!address) throw new Error(`No IP address found for SMTP host ${transport.host}`);
-        transport.host = address.address;
-        transport.tls = { ...transport.tls, servername: configuration.transport.host };
-    }
-
-    return nodemailer.createTransport(transport);
+    return nodemailer.createTransport(configuration.transport);
 }
 
 async function verifyEmailConfiguration() {
@@ -87,13 +91,8 @@ async function verifyEmailConfiguration() {
         return true;
     } catch (error) {
         console.error("SMTP verification failed", {
-            stage: error.code === "EAUTH" ? "authentication" : "connection_or_greeting",
-            code: error.code || "SMTP_VERIFY_FAILED",
-            responseCode: error.responseCode,
-            message: error.message,
-            syscall: error.syscall,
-            hostname: error.hostname,
-            address: error.address,
+            stage: error.code === "EAUTH" ? "authentication" : error.code === "ESOCKET" ? "connection_or_tls" : "connection_or_greeting",
+            ...getSafeEmailErrorDetails(error),
         });
         return false;
     } finally {
@@ -136,12 +135,7 @@ async function sendWelcomeEmail(email, name) {
     } catch (error) {
         console.error("Welcome email SMTP submission failed", {
             stage: error.code === "EAUTH" ? "authentication" : "send_mail",
-            code: error.code || "EMAIL_SEND_FAILED",
-            responseCode: error.responseCode,
-            message: error.message,
-            syscall: error.syscall,
-            hostname: error.hostname,
-            address: error.address,
+            ...getSafeEmailErrorDetails(error),
         });
         throw error;
     } finally {
@@ -209,4 +203,4 @@ async function sendBookingConfirmationEmail(booking) {
     }
 }
 
-module.exports = { sendWelcomeEmail, sendPasswordResetOtp, sendBookingConfirmationEmail, verifyEmailConfiguration, getEmailEnvironmentStatus };
+module.exports = { sendWelcomeEmail, sendPasswordResetOtp, sendBookingConfirmationEmail, verifyEmailConfiguration, getEmailEnvironmentStatus, getSafeEmailErrorDetails };

@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const https = require("https");
 const Booking = require("../modules/Booking");
 const Event = require("../modules/Event");
-const { sendBookingConfirmationEmail } = require("../services/emailService");
+const { sendBookingConfirmationEmail, getSafeEmailErrorDetails } = require("../services/emailService");
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,7 +25,7 @@ async function sendBookingConfirmationOnce(bookingId) {
                 ],
             },
             { $set: { confirmationEmailStatus: "sending", confirmationEmailClaimId: claimId, confirmationEmailLastAttemptAt: new Date(), confirmationEmailLastError: null }, $inc: { confirmationEmailAttempts: 1 } },
-            { new: true }
+            { returnDocument: "after" }
         ).populate("event", "title date location city").lean();
     } catch (error) {
         console.error("Booking email claim failed", { code: error.code || "DATABASE_ERROR" });
@@ -50,7 +50,7 @@ async function sendBookingConfirmationOnce(bookingId) {
             { _id: bookingId, confirmationEmailStatus: "sending", confirmationEmailClaimId: claimId },
             { $set: { confirmationEmailStatus: "failed", confirmationEmailLastError: errorCode }, $unset: { confirmationEmailClaimId: 1 } }
         ).catch((databaseError) => console.error("Booking email failure status could not be saved", { code: databaseError.code || "DATABASE_ERROR" }));
-        console.warn("Booking confirmation email failed", { code: errorCode });
+        console.warn("Booking confirmation email failed", getSafeEmailErrorDetails(error));
         return "failed";
     }
 
@@ -259,7 +259,7 @@ const createBooking = async (req, res) => {
         const event = await Event.findOneAndUpdate(
             { _id: eventId, status: "published", availableTickets: { $gte: ticketQuantity } },
             { $inc: { availableTickets: -ticketQuantity } },
-            { new: true }
+            { returnDocument: "after" }
         );
 
         if (!event) {
@@ -437,7 +437,7 @@ const cancelBooking = async (req, res) => {
                     paymentStatus: "unpaid",
                 },
                 { $set: { bookingStatus: "cancelling" } },
-                { new: true }
+                { returnDocument: "after" }
             );
 
             if (!booking) {
@@ -475,7 +475,7 @@ const cancelBooking = async (req, res) => {
                     $inc: { availableTickets: booking.ticketQuantity },
                     $addToSet: { ticketReleaseBookingIds: booking._id },
                 },
-                { new: true }
+                { returnDocument: "after" }
             );
 
             if (!releasedEvent) {
@@ -500,7 +500,7 @@ const cancelBooking = async (req, res) => {
                 paymentStatus: "unpaid",
             },
             { $set: { bookingStatus: "cancelled" } },
-            { new: true }
+            { returnDocument: "after" }
         );
 
         if (!cancelledBooking) {
@@ -601,7 +601,7 @@ const createPaymentOrder = async (req, res) => {
                         razorpayCurrency: order.currency,
                     },
                 },
-                { new: true }
+                { returnDocument: "after" }
             );
 
             if (!booking) {
@@ -652,7 +652,7 @@ const verifyPayment = async (req, res) => {
                     booking = await Booking.findOneAndUpdate(
                         { _id: booking._id, bookingStatus: "confirmed", paymentStatus: "paid", paymentVerifiedAt: { $type: "date" }, ticketToken: { $exists: false } },
                         { $set: { ticketToken: createTicketToken() } },
-                        { new: true }
+                        { returnDocument: "after" }
                     ).select("+ticketToken") || await Booking.findById(booking._id).select("+ticketToken");
                 }
                 const confirmationEmailStatus = await sendBookingConfirmationOnce(booking._id);
@@ -704,7 +704,7 @@ const verifyPayment = async (req, res) => {
                     ticketToken: createTicketToken(),
                 },
             },
-            { new: true }
+            { returnDocument: "after" }
         );
 
         if (!updatedBooking) {
