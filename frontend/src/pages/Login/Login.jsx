@@ -20,7 +20,7 @@ export function Login() {
         onSubmit: async (values, { setStatus }) => {
             setStatus("");
             try {
-                let r = await fetch(`${import.meta.env.VITE_API_URL}/login`, {
+                let response = await fetch(`${import.meta.env.VITE_API_URL}/login`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: values.email.trim().toLowerCase(), password: values.password }),
