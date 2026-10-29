@@ -1,7 +1,7 @@
 import axios from "axios";
 import { authenticatedFetch } from "./api";
 
-const API_URL = "http://localhost:5000/events";
+const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/events`;
 
 export const getEvents = async () => {
     const response = await axios.get(API_URL);

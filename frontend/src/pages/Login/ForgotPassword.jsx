@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-const API = "http://localhost:5000/password-reset";
+const API = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/password-reset`;
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10";
 const buttonClass = "inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-primary to-brand-violet px-5 py-3 text-sm font-extrabold text-white shadow-md shadow-indigo-500/20 transition hover:brightness-105 disabled:cursor-wait disabled:opacity-60";
 
